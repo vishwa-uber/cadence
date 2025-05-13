@@ -229,6 +229,10 @@ func WorkflowTerminationReason(reason string) Tag {
 	return newStringTag("wf-termination-reason", reason)
 }
 
+func Duration(duration time.Duration) Tag {
+	return newDurationTag("duration", duration)
+}
+
 // domain related
 
 // WorkflowDomainID returns tag for WorkflowDomainID
@@ -1143,8 +1147,12 @@ func ActivityTaskState(state int32) Tag {
 	return newInt32("activity-task-state", state)
 }
 
-func Namespace(name string) Tag {
-	return newStringTag("namespace", name)
+func ShardNamespace(name string) Tag {
+	return newStringTag("shard-namespace", name)
+}
+
+func ElectionDelay(t time.Duration) Tag {
+	return newDurationTag("election-delay", t)
 }
 
 func WorkflowContextLockLatency(duration time.Duration) Tag {
@@ -1162,4 +1170,9 @@ func HashRingResult(addr string) Tag {
 
 func ShardDistributorResult(addr string) Tag {
 	return newStringTag("shard-distributor-result", addr)
+}
+
+// PeerHostname returns a tag for peer hostname
+func PeerHostname(hostname string) Tag {
+	return newStringTag("peer-hostname", hostname)
 }

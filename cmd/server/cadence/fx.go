@@ -29,65 +29,112 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock/clockfx"
 	"github.com/uber/cadence/common/config"
+	"github.com/uber/cadence/common/dynamicconfig"
+	"github.com/uber/cadence/common/dynamicconfig/dynamicconfigfx"
 	"github.com/uber/cadence/common/log"
+	"github.com/uber/cadence/common/log/logfx"
+	"github.com/uber/cadence/common/membership/membershipfx"
+	"github.com/uber/cadence/common/metrics/metricsfx"
+	"github.com/uber/cadence/common/peerprovider/ringpopprovider/ringpopfx"
 	"github.com/uber/cadence/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"github.com/uber/cadence/common/rpc/rpcfx"
+	"github.com/uber/cadence/common/service"
+	shardDistributorCfg "github.com/uber/cadence/service/sharddistributor/config"
+	"github.com/uber/cadence/service/sharddistributor/leader/leaderstore"
+	"github.com/uber/cadence/service/sharddistributor/sharddistributorfx"
 	"github.com/uber/cadence/tools/cassandra"
 	"github.com/uber/cadence/tools/sql"
 )
 
+var _commonModule = fx.Options(
+	config.Module,
+	dynamicconfigfx.Module,
+	logfx.Module,
+	metricsfx.Module,
+	clockfx.Module)
+
 // Module provides a cadence server initialization with root components.
 // AppParams allows to provide optional/overrides for implementation specific dependencies.
-var Module = fx.Options(
-	fx.Provide(NewApp),
-	// empty invoke so fx won't drop the application from the dependencies.
-	fx.Invoke(func(a *App) {}),
-)
+func Module(serviceName string) fx.Option {
+	if serviceName == service.ShortName(service.ShardDistributor) {
+		return fx.Options(
+			fx.Supply(serviceContext{
+				Name:     serviceName,
+				FullName: service.FullName(serviceName),
+			}),
+			fx.Provide(func(cfg config.Config) shardDistributorCfg.LeaderElection {
+				return shardDistributorCfg.GetLeaderElectionFromExternal(cfg.LeaderElection)
+			}),
+			leaderstore.StoreModule("etcd"),
+
+			rpcfx.Module,
+			// PeerProvider could be overriden e.g. with a DNS based internal solution.
+			ringpopfx.Module,
+			membershipfx.Module,
+			sharddistributorfx.Module)
+	}
+	return fx.Options(
+		fx.Supply(serviceContext{
+			Name:     serviceName,
+			FullName: service.FullName(serviceName),
+		}),
+		fx.Provide(NewApp),
+		// empty invoke so fx won't drop the application from the dependencies.
+		fx.Invoke(func(a *App) {}),
+	)
+}
 
 type AppParams struct {
 	fx.In
 
-	RootDir    string   `name:"root-dir"`
-	Services   []string `name:"services"`
-	AppContext config.Context
-	Config     config.Config
-	Logger     log.Logger
-	LifeCycle  fx.Lifecycle
+	Service       string `name:"service"`
+	AppContext    config.Context
+	Config        config.Config
+	Logger        log.Logger
+	LifeCycle     fx.Lifecycle
+	DynamicConfig dynamicconfig.Client
 }
 
 // NewApp created a new Application from pre initalized config and logger.
 func NewApp(params AppParams) *App {
 	app := &App{
-		cfg:      params.Config,
-		rootDir:  params.RootDir,
-		logger:   params.Logger,
-		services: params.Services,
+		cfg:           params.Config,
+		logger:        params.Logger,
+		service:       params.Service,
+		dynamicConfig: params.DynamicConfig,
 	}
-	params.LifeCycle.Append(fx.Hook{OnStart: app.Start, OnStop: app.Stop})
+
+	params.LifeCycle.Append(fx.StartHook(app.verifySchema))
+	params.LifeCycle.Append(fx.StartStopHook(app.Start, app.Stop))
 	return app
 }
 
 // App is a fx application that registers itself into fx.Lifecycle and runs.
 // It is done implicitly, since it provides methods Start and Stop which are picked up by fx.
 type App struct {
-	cfg     config.Config
-	rootDir string
-	logger  log.Logger
+	cfg           config.Config
+	rootDir       string
+	logger        log.Logger
+	dynamicConfig dynamicconfig.Client
 
-	daemons  []common.Daemon
-	services []string
+	daemon  common.Daemon
+	service string
 }
 
 func (a *App) Start(_ context.Context) error {
-	if a.cfg.DynamicConfig.Client == "" {
-		a.cfg.DynamicConfigClient.Filepath = constructPathIfNeed(a.rootDir, a.cfg.DynamicConfigClient.Filepath)
-	} else {
-		a.cfg.DynamicConfig.FileBased.Filepath = constructPathIfNeed(a.rootDir, a.cfg.DynamicConfig.FileBased.Filepath)
-	}
+	a.daemon = newServer(a.service, a.cfg, a.logger, a.dynamicConfig)
+	a.daemon.Start()
+	return nil
+}
 
-	if err := a.cfg.ValidateAndFillDefaults(); err != nil {
-		return fmt.Errorf("config validation failed: %w", err)
-	}
+func (a *App) Stop(ctx context.Context) error {
+	a.daemon.Stop()
+	return nil
+}
+
+func (a *App) verifySchema(ctx context.Context) error {
 	// cassandra schema version validation
 	if err := cassandra.VerifyCompatibleVersion(a.cfg.Persistence, gocql.Quorum); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
@@ -96,20 +143,12 @@ func (a *App) Start(_ context.Context) error {
 	if err := sql.VerifyCompatibleVersion(a.cfg.Persistence); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
-
-	var daemons []common.Daemon
-	for _, svc := range a.services {
-		server := newServer(svc, a.cfg, a.logger)
-		daemons = append(daemons, server)
-		server.Start()
-	}
-
 	return nil
 }
 
-func (a *App) Stop(ctx context.Context) error {
-	for _, daemon := range a.daemons {
-		daemon.Stop()
-	}
-	return nil
+type serviceContext struct {
+	fx.Out
+
+	Name     string `name:"service"`
+	FullName string `name:"service-full-name"`
 }

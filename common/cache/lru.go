@@ -343,6 +343,9 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 			// replace the value
 			existing := entry.value
 			if allowUpdate {
+				if c.isCacheFull() {
+					c.metricsScope.IncCounter(metrics.BaseCacheFullCounter)
+				}
 				for c.isCacheFull() {
 					// Find the oldest unpinned item to evict
 					oldest := c.byAccess.Back()
@@ -351,6 +354,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 						if entry.refCount == 0 {
 							// Found an unpinned item, evict it
 							c.deleteInternal(oldest)
+							c.metricsScope.IncCounter(metrics.BaseCacheEvictCounter)
 							break
 						}
 						oldest = oldest.Prev()
@@ -400,6 +404,9 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		}
 		c.byKey[key] = c.byAccess.PushFront(entry)
 		c.updateSizeOnAdd(key, valueSize)
+		if c.isCacheFull() {
+			c.metricsScope.IncCounter(metrics.BaseCacheFullCounter)
+		}
 		for c.isCacheFull() {
 			// Find the oldest unpinned item to evict
 			oldest := c.byAccess.Back()
@@ -408,6 +415,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				if entry.refCount == 0 {
 					// Found an unpinned item, evict it
 					c.deleteInternal(oldest)
+					c.metricsScope.IncCounter(metrics.BaseCacheEvictCounter)
 					break
 				}
 				oldest = oldest.Prev()
@@ -421,7 +429,9 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	} else {
 		c.byKey[key] = c.byAccess.PushFront(entry)
 		c.updateSizeOnAdd(key, valueSize)
-
+		if c.isCacheFull() {
+			c.metricsScope.IncCounter(metrics.BaseCacheFullCounter)
+		}
 		for c.isCacheFull() {
 			// Find the oldest unpinned item to evict
 			oldest := c.byAccess.Back()
@@ -430,6 +440,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 				if entry.refCount <= 0 {
 					// Found an unpinned item, evict it
 					c.deleteInternal(oldest)
+					c.metricsScope.IncCounter(metrics.BaseCacheEvictCounter)
 					break
 				}
 				oldest = oldest.Prev()
@@ -488,5 +499,6 @@ func (c *lru) updateSizeOnDelete(key interface{}) {
 func (c *lru) emitSizeOnUpdate() {
 	c.metricsScope.UpdateGauge(metrics.BaseCacheByteSize, float64(c.currSize))
 	c.metricsScope.UpdateGauge(metrics.BaseCacheByteSizeLimitGauge, float64(c.maxSize()))
-
+	c.metricsScope.UpdateGauge(metrics.BaseCacheCount, float64(len(c.byKey)))
+	c.metricsScope.UpdateGauge(metrics.BaseCacheCountLimitGauge, float64(c.maxCount))
 }

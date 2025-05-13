@@ -82,8 +82,8 @@ type (
 		queueTaskProcessor      task.Processor
 		failoverCoordinator     failover.Coordinator
 		workflowIDCache         workflowcache.WFCache
-		queueProcessorFactory   queue.ProcessorFactory
 		ratelimitAggregator     algorithm.RequestWeighted
+		queueFactories          []queue.Factory
 	}
 )
 
@@ -112,16 +112,19 @@ func NewHandler(
 
 // Start starts the handler
 func (h *handlerImpl) Start() {
-	h.replicationTaskFetchers = replication.NewTaskFetchers(
+	var err error
+	h.replicationTaskFetchers, err = replication.NewTaskFetchers(
 		h.GetLogger(),
 		h.config,
 		h.GetClusterMetadata(),
 		h.GetClientBean(),
 	)
+	if err != nil {
+		h.GetLogger().Fatal("Creating replication task fetchers failed", tag.Error(err))
+	}
 
 	h.replicationTaskFetchers.Start()
 
-	var err error
 	taskPriorityAssigner := task.NewPriorityAssigner(
 		h.GetClusterMetadata().GetCurrentClusterName(),
 		h.GetDomainCache(),
@@ -157,6 +160,18 @@ func (h *handlerImpl) Start() {
 	)
 	h.queueTaskProcessor = task.NewRateLimitedProcessor(taskProcessor, taskRateLimiter)
 	h.queueTaskProcessor.Start()
+
+	h.queueFactories = []queue.Factory{
+		queue.NewTransferQueueFactory(
+			h.queueTaskProcessor,
+			h.GetArchiverClient(),
+			h.workflowIDCache,
+		),
+		queue.NewTimerQueueFactory(
+			h.queueTaskProcessor,
+			h.GetArchiverClient(),
+		),
+	}
 
 	h.historyEventNotifier = events.NewNotifier(h.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
 	// events notifier must starts before controller
@@ -217,15 +232,12 @@ func (h *handlerImpl) CreateEngine(
 		shardContext,
 		h.GetVisibilityManager(),
 		h.GetMatchingClient(),
-		h.GetSDKClient(),
 		h.historyEventNotifier,
 		h.config,
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
-		h.queueTaskProcessor,
 		h.failoverCoordinator,
-		h.workflowIDCache,
-		queue.NewProcessorFactory(),
+		h.queueFactories,
 	)
 }
 

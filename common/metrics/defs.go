@@ -430,6 +430,8 @@ const (
 	// MatchingClientRefreshTaskListPartitionConfigScope tracks RPC calls to matching service
 	MatchingClientRefreshTaskListPartitionConfigScope
 
+	// FrontendClientDeleteDomainScope tracks RPC calls to frontend service
+	FrontendClientDeleteDomainScope
 	// FrontendClientDeprecateDomainScope tracks RPC calls to frontend service
 	FrontendClientDeprecateDomainScope
 	// FrontendClientDescribeDomainScope tracks RPC calls to frontend service
@@ -604,7 +606,9 @@ const (
 	// AdminClientUpdateTaskListPartitionConfigScope is the metrics scope for admin.UpdateTaskListPartitionConfig
 	AdminClientUpdateTaskListPartitionConfigScope
 
-	// DCRedirectionDeprecateDomainScope tracks RPC calls for dc redirection
+	// DCRedirectionDeleteDomainScope tracks RPC calls for dc redirection
+	DCRedirectionDeleteDomainScope
+	// DCRedirectionDeleteDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateDomainScope
 	// DCRedirectionDescribeDomainScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeDomainScope
@@ -1012,6 +1016,8 @@ const (
 	FrontendDescribeDomainScope
 	// FrontendUpdateDomainScope is the metric scope for frontend.DescribeDomain
 	FrontendUpdateDomainScope
+	// FrontendDeleteDomainScope is the metric scope for frontend.DeleteDomain
+	FrontendDeleteDomainScope
 	// FrontendDeprecateDomainScope is the metric scope for frontend.DeprecateDomain
 	FrontendDeprecateDomainScope
 	// FrontendQueryWorkflowScope is the metric scope for frontend.QueryWorkflow
@@ -1321,6 +1327,8 @@ const (
 	HistoryExecutionCacheScope
 	// HistoryWorkflowCacheScope is the scope used by history workflow cache
 	HistoryWorkflowCacheScope
+	// HistoryFlushBufferedEventsScope is the scope used by history when flushing buffered events
+	HistoryFlushBufferedEventsScope
 
 	NumHistoryScopes
 )
@@ -1579,6 +1587,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientUpdateTaskListPartitionConfigScope:  {operation: "MatchingClientUpdateTaskListPartitionConfig", tags: map[string]string{CadenceRoleTagName: MatchingClientRoleTagValue}},
 		MatchingClientRefreshTaskListPartitionConfigScope: {operation: "MatchingClientRefreshTaskListPartitionConfig", tags: map[string]string{CadenceRoleTagName: MatchingClientRoleTagValue}},
 
+		FrontendClientDeleteDomainScope:                          {operation: "FrontendClientDeleteDomain", tags: map[string]string{CadenceRoleTagName: FrontendClientRoleTagValue}},
 		FrontendClientDeprecateDomainScope:                       {operation: "FrontendClientDeprecateDomain", tags: map[string]string{CadenceRoleTagName: FrontendClientRoleTagValue}},
 		FrontendClientDescribeDomainScope:                        {operation: "FrontendClientDescribeDomain", tags: map[string]string{CadenceRoleTagName: FrontendClientRoleTagValue}},
 		FrontendClientDescribeTaskListScope:                      {operation: "FrontendClientDescribeTaskList", tags: map[string]string{CadenceRoleTagName: FrontendClientRoleTagValue}},
@@ -1667,6 +1676,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientUpdateDomainAsyncWorkflowConfiguratonScope: {operation: "AdminClientUpdateDomainAsyncWorkflowConfiguraton", tags: map[string]string{CadenceRoleTagName: AdminClientRoleTagValue}},
 		AdminClientUpdateTaskListPartitionConfigScope:         {operation: "AdminClientUpdateTaskListPartitionConfig", tags: map[string]string{CadenceRoleTagName: AdminClientRoleTagValue}},
 
+		DCRedirectionDeleteDomainScope:                          {operation: "DCRedirectionDeleteDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDeprecateDomainScope:                       {operation: "DCRedirectionDeprecateDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeDomainScope:                        {operation: "DCRedirectionDescribeDomain", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskListScope:                      {operation: "DCRedirectionDescribeTaskList", tags: map[string]string{CadenceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1866,6 +1876,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendDescribeDomainScope:                        {operation: "DescribeDomain"},
 		FrontendListDomainsScope:                           {operation: "ListDomain"},
 		FrontendUpdateDomainScope:                          {operation: "UpdateDomain"},
+		FrontendDeleteDomainScope:                          {operation: "DeleteDomain"},
 		FrontendDeprecateDomainScope:                       {operation: "DeprecateDomain"},
 		FrontendQueryWorkflowScope:                         {operation: "QueryWorkflow"},
 		FrontendDescribeWorkflowExecutionScope:             {operation: "DescribeWorkflowExecution"},
@@ -2018,6 +2029,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		LargeExecutionBlobShardScope:                                    {operation: "LargeExecutionBlobShard"},
 		HistoryExecutionCacheScope:                                      {operation: "HistoryExecutionCache"},
 		HistoryWorkflowCacheScope:                                       {operation: "HistoryWorkflowCache"},
+		HistoryFlushBufferedEventsScope:                                 {operation: "HistoryFlushBufferedEvents"},
 	},
 	// Matching Scope Names
 	Matching: {
@@ -2082,6 +2094,7 @@ const (
 	CadenceErrQueryFailedCounter
 	CadenceErrLimitExceededCounter
 	CadenceErrContextTimeoutCounter
+	CadenceErrGRPCConnectionClosingCounter
 	CadenceErrRetryTaskCounter
 	CadenceErrBadBinaryCounter
 	CadenceErrClientVersionNotSupportedCounter
@@ -2141,6 +2154,9 @@ const (
 	PersistenceErrDBUnavailableCounterPerDomain
 	PersistenceSampledCounterPerDomain
 	PersistenceEmptyResponseCounterPerDomain
+
+	NoSQLShardStoreReadFromOriginalColumnCounter
+	NoSQLShardStoreReadFromDataBlobCounter
 
 	CadenceClientRequests
 	CadenceClientFailures
@@ -2272,6 +2288,7 @@ const (
 
 	DomainReplicationQueueSizeGauge
 	DomainReplicationQueueSizeErrorCount
+	DomainCacheUpdateLatency
 
 	ParentClosePolicyProcessorSuccess
 	ParentClosePolicyProcessorFailures
@@ -2315,6 +2332,10 @@ const (
 	BaseCacheByteSizeLimitGauge
 	BaseCacheHit
 	BaseCacheMiss
+	BaseCacheCount
+	BaseCacheCountLimitGauge
+	BaseCacheFullCounter
+	BaseCacheEvictCounter
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2420,6 +2441,7 @@ const (
 	DecisionRetriesExceededCounter
 	StaleMutableStateCounter
 	DataInconsistentCounter
+	DuplicateActivityTaskEventCounter
 	TimerResurrectionCounter
 	TimerProcessingDeletionTimerNoopDueToMutableStateNotLoading
 	TimerProcessingDeletionTimerNoopDueToWFRunning
@@ -2809,6 +2831,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceErrQueryFailedCounter:                                 {metricName: "cadence_errors_query_failed", metricType: Counter},
 		CadenceErrLimitExceededCounter:                               {metricName: "cadence_errors_limit_exceeded", metricType: Counter},
 		CadenceErrContextTimeoutCounter:                              {metricName: "cadence_errors_context_timeout", metricType: Counter},
+		CadenceErrGRPCConnectionClosingCounter:                       {metricName: "cadence_errors_grpc_connection_closing", metricType: Counter},
 		CadenceErrRetryTaskCounter:                                   {metricName: "cadence_errors_retry_task", metricType: Counter},
 		CadenceErrBadBinaryCounter:                                   {metricName: "cadence_errors_bad_binary", metricType: Counter},
 		CadenceErrClientVersionNotSupportedCounter:                   {metricName: "cadence_errors_client_version_not_supported", metricType: Counter},
@@ -2867,6 +2890,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrDBUnavailableCounterPerDomain:                  {metricName: "persistence_errors_db_unavailable_per_domain", metricRollupName: "persistence_errors_db_unavailable", metricType: Counter},
 		PersistenceSampledCounterPerDomain:                           {metricName: "persistence_sampled_per_domain", metricRollupName: "persistence_sampled", metricType: Counter},
 		PersistenceEmptyResponseCounterPerDomain:                     {metricName: "persistence_empty_response_per_domain", metricRollupName: "persistence_empty_response", metricType: Counter},
+		NoSQLShardStoreReadFromOriginalColumnCounter:                 {metricName: "nosql_shard_store_read_from_original_column", metricType: Counter},
+		NoSQLShardStoreReadFromDataBlobCounter:                       {metricName: "nosql_shard_store_read_from_data_blob", metricType: Counter},
 		CadenceClientRequests:                                        {metricName: "cadence_client_requests", metricType: Counter},
 		CadenceClientFailures:                                        {metricName: "cadence_client_errors", metricType: Counter},
 		CadenceClientLatency:                                         {metricName: "cadence_client_latency", metricType: Timer},
@@ -3018,6 +3043,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CadenceShardFailureGauge:             {metricName: "cadence_shard_failure", metricType: Gauge},
 		DomainReplicationQueueSizeGauge:      {metricName: "domain_replication_queue_size", metricType: Gauge},
 		DomainReplicationQueueSizeErrorCount: {metricName: "domain_replication_queue_failed", metricType: Counter},
+		DomainCacheUpdateLatency:             {metricName: "domain_cache_update_latency", metricType: Histogram, buckets: DomainCacheUpdateBuckets},
 		ParentClosePolicyProcessorSuccess:    {metricName: "parent_close_policy_processor_requests", metricType: Counter},
 		ParentClosePolicyProcessorFailures:   {metricName: "parent_close_policy_processor_errors", metricType: Counter},
 
@@ -3056,6 +3082,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		BaseCacheByteSizeLimitGauge: {metricName: "cache_byte_size_limit", metricType: Gauge},
 		BaseCacheHit:                {metricName: "cache_hit", metricType: Counter},
 		BaseCacheMiss:               {metricName: "cache_miss", metricType: Counter},
+		BaseCacheCount:              {metricName: "cache_count", metricType: Counter},
+		BaseCacheCountLimitGauge:    {metricName: "cache_count_limit", metricType: Gauge},
+		BaseCacheFullCounter:        {metricName: "cache_full", metricType: Counter},
+		BaseCacheEvictCounter:       {metricName: "cache_evict", metricType: Counter},
 	},
 	History: {
 		TaskRequests:             {metricName: "task_requests", metricType: Counter},
@@ -3152,6 +3182,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		DecisionRetriesExceededCounter:                               {metricName: "decision_retries_exceeded", metricType: Counter},
 		StaleMutableStateCounter:                                     {metricName: "stale_mutable_state", metricType: Counter},
 		DataInconsistentCounter:                                      {metricName: "data_inconsistent", metricType: Counter},
+		DuplicateActivityTaskEventCounter:                            {metricName: "duplicate_activity_task_event", metricType: Counter},
 		TimerResurrectionCounter:                                     {metricName: "timer_resurrection", metricType: Counter},
 		TimerProcessingDeletionTimerNoopDueToMutableStateNotLoading:  {metricName: "timer_processing_skipping_deletion_due_to_missing_mutable_state", metricType: Counter},
 		TimerProcessingDeletionTimerNoopDueToWFRunning:               {metricName: "timer_processing_skipping_deletion_due_to_running", metricType: Counter},
@@ -3611,6 +3642,12 @@ var GlobalRatelimiterUsageHistogram = append(
 
 // ResponseRowSizeBuckets contains buckets for tracking how many rows are returned per persistence operation
 var ResponseRowSizeBuckets = append(
+	tally.ValueBuckets{0},                              // need an explicit 0 or zero is reported as 1
+	tally.MustMakeExponentialValueBuckets(1, 2, 17)..., // 1..65536
+)
+
+// DomainCacheUpdateBuckets contain metric results for domain update operations
+var DomainCacheUpdateBuckets = append(
 	tally.ValueBuckets{0},                              // need an explicit 0 or zero is reported as 1
 	tally.MustMakeExponentialValueBuckets(1, 2, 17)..., // 1..65536
 )

@@ -24,12 +24,15 @@
 package cadence
 
 import (
+	"context"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/fx/fxtest"
 	"go.uber.org/mock/gomock"
 
 	"github.com/uber/cadence/common"
@@ -94,10 +97,18 @@ func (s *ServerSuite) TestServerStartup() {
 
 	logger := testlogger.New(s.T())
 
+	lifecycle := fxtest.NewLifecycle(s.T())
+
 	var daemons []common.Daemon
-	services := service.ShortNames(service.List)
+	// Shard distributor should be tested separately
+	distributorShortName := service.ShortName(service.ShardDistributor)
+	services := slices.DeleteFunc(service.ShortNames(service.List),
+		func(s string) bool {
+			return s == distributorShortName
+		})
+
 	for _, svc := range services {
-		server := newServer(svc, cfg, logger)
+		server := newServer(svc, cfg, logger, dynamicconfig.NewNopClient())
 		daemons = append(daemons, server)
 		server.Start()
 	}
@@ -105,13 +116,13 @@ func (s *ServerSuite) TestServerStartup() {
 	timer := time.NewTimer(time.Second * 10)
 
 	<-timer.C
+	s.NoError(lifecycle.Stop(context.Background()))
 	for _, daemon := range daemons {
 		daemon.Stop()
 	}
 }
 
 func TestSettingGettingZonalIsolationGroupsFromIG(t *testing.T) {
-
 	ctrl := gomock.NewController(t)
 	client := dynamicconfig.NewMockClient(ctrl)
 	client.EXPECT().GetListValue(dynamicproperties.AllIsolationGroups, gomock.Any()).Return([]interface{}{

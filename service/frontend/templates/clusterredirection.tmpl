@@ -12,7 +12,7 @@ import (
 	frontendcfg "github.com/uber/cadence/service/frontend/config"
 )
 
-{{$nonForwardingAPIs := list "Health" "DeprecateDomain" "DescribeDomain" "ListDomains" "RegisterDomain" "UpdateDomain" "GetSearchAttributes" "GetClusterInfo" "DiagnoseWorkflowExecution"}}
+{{$nonForwardingAPIs := list "Health" "DeprecateDomain" "DeleteDomain" "DescribeDomain" "ListDomains" "RegisterDomain" "UpdateDomain" "GetSearchAttributes" "GetClusterInfo" "DiagnoseWorkflowExecution"}}
 {{$domainIDAPIs := list "RecordActivityTaskHeartbeat" "RespondActivityTaskCanceled" "RespondActivityTaskCompleted" "RespondActivityTaskFailed" "RespondDecisionTaskCompleted" "RespondDecisionTaskFailed" "RespondQueryTaskCompleted"}}
 {{$queryTaskTokenAPIs := list "RespondQueryTaskCompleted"}}
 {{$readAPIsWithStrongConsistency := list "QueryWorkflow" "DescribeWorkflowExecution" "GetWorkflowExecutionHistory"}}
@@ -42,6 +42,7 @@ func NewAPIHandler(
 		config,
 		resource.GetDomainCache(),
 		policy,
+		resource.GetLogger(),
 	)
 
 	return &clusterRedirectionHandler{
@@ -111,7 +112,10 @@ func (handler *clusterRedirectionHandler) {{$method.Declaration}} {
 		case targetDC == handler.currentClusterName:
 			{{$method.ResultsNames}} = handler.frontendHandler.{{$method.Call}}
 		default:
-			remoteClient := handler.GetRemoteFrontendClient(targetDC)
+			remoteClient, err := handler.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
 			{{$method.ResultsNames}} = remoteClient.{{$method.Name}}({{$method.Params.Pass}}, handler.callOptions...)
 		}
 		return err

@@ -42,6 +42,7 @@ import (
 	"github.com/uber/cadence/common/constants"
 	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/elasticsearch/validator"
+	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/isolationgroup"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -360,10 +361,12 @@ func (wh *WorkflowHandler) PollForActivityTask(
 			if ok {
 				ctxTimeout = ctxDeadline.Sub(callTime).String()
 			}
+			peerHostname, origErr := errors.ExtractPeerHostname(err)
 			wh.GetLogger().Error("PollForActivityTask failed.",
 				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
 				tag.Value(ctxTimeout),
-				tag.Error(err))
+				tag.Error(origErr),
+				tag.PeerHostname(peerHostname))
 			return nil, err
 		}
 		// Must be cancellation error.  Doesn't matter what we return here.  Client already went away.
@@ -499,10 +502,12 @@ func (wh *WorkflowHandler) PollForDecisionTask(
 			if ok {
 				ctxTimeout = ctxDeadline.Sub(callTime).String()
 			}
+			peerHostname, origErr := errors.ExtractPeerHostname(err)
 			wh.GetLogger().Error("PollForDecisionTask failed.",
 				tag.WorkflowTaskListName(pollRequest.GetTaskList().GetName()),
 				tag.Value(ctxTimeout),
-				tag.Error(err))
+				tag.Error(origErr),
+				tag.PeerHostname(peerHostname))
 			return nil, err
 		}
 
@@ -3095,7 +3100,10 @@ func (wh *WorkflowHandler) checkOngoingFailover(
 
 	g := &errgroup.Group{}
 	for clusterName := range enabledClusters {
-		frontendClient := wh.GetRemoteFrontendClient(clusterName)
+		frontendClient, err := wh.GetRemoteFrontendClient(clusterName)
+		if err != nil {
+			return &types.BadRequestError{Message: err.Error()}
+		}
 		g.Go(func() (e error) {
 			defer func() { log.CapturePanic(recover(), wh.GetLogger(), &e) }()
 
