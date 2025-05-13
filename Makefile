@@ -61,8 +61,9 @@ $(BUILD)/lint: $(BUILD)/fmt # lint will fail if fmt fails, so fmt first
 $(BUILD)/proto-lint:
 $(BUILD)/gomod-lint:
 $(BUILD)/goversion-lint:
-$(BUILD)/fmt: $(BUILD)/copyright # formatting must occur only after all other go-file-modifications are done
-$(BUILD)/copyright: $(BUILD)/codegen # must add copyright to generated code, sometimes needs re-formatting
+$(BUILD)/fmt: $(BUILD)/codegen # formatting must occur only after all other go-file-modifications are done
+# $(BUILD)/copyright 
+# $(BUILD)/copyright: $(BUILD)/codegen # must add copyright to generated code, sometimes needs re-formatting
 $(BUILD)/codegen: $(BUILD)/thrift $(BUILD)/protoc
 $(BUILD)/thrift: $(BUILD)/go_mod_check
 $(BUILD)/protoc: $(BUILD)/go_mod_check
@@ -216,8 +217,8 @@ $(BUILD)/go_mod_check: go.mod internal/tools/go.mod go.work
 	$Q touch $@
 
 # copyright header checker/writer.  only requires stdlib, so no other dependencies are needed.
-$(BIN)/copyright: cmd/tools/copyright/licensegen.go
-	$Q go build -o $@ ./cmd/tools/copyright/licensegen.go
+# $(BIN)/copyright: cmd/tools/copyright/licensegen.go
+# 	$Q go build -o $@ ./cmd/tools/copyright/licensegen.go
 
 # https://docs.buf.build/
 # changing BUF_VERSION will automatically download and use the specified version.
@@ -421,12 +422,12 @@ $(BUILD)/fmt: $(ALL_SRC) $(BIN)/goimports $(BIN)/gci | $(BUILD)
 	$Q echo "grouping imports..."
 	$Q $(BIN)/gci write --section standard --section 'Prefix(github.com/uber/cadence/)' --section default --section blank $(FRESH_ALL_SRC)
 	$Q touch $@
-	$Q $(MAYBE_TOUCH_COPYRIGHT)
+# 	$Q $(MAYBE_TOUCH_COPYRIGHT)
 
-$(BUILD)/copyright: $(ALL_SRC) $(BIN)/copyright | $(BUILD)
-	$(BIN)/copyright --verifyOnly
-	$Q $(eval MAYBE_TOUCH_COPYRIGHT=touch $@)
-	$Q touch $@
+# $(BUILD)/copyright: $(ALL_SRC) $(BIN)/copyright | $(BUILD)
+# 	$(BIN)/copyright --verifyOnly
+# 	$Q $(eval MAYBE_TOUCH_COPYRIGHT=touch $@)
+# 	$Q touch $@
 
 # ====================================
 # developer-oriented targets
@@ -454,9 +455,9 @@ lint: ## (Re)run the linter
 fmt: $(BUILD)/fmt ## Run `gofmt` / organize imports / etc
 
 # not identical to the intermediate target, but does provide the same codegen (or more).
-copyright: $(BIN)/copyright | $(BUILD) ## Update copyright headers
-	$(BIN)/copyright
-	$Q touch $(BUILD)/copyright
+# copyright: $(BIN)/copyright | $(BUILD) ## Update copyright headers
+# 	$(BIN)/copyright
+# 	$Q touch $(BUILD)/copyright
 
 define make_quietly
 $Q echo "make $1..."
@@ -467,9 +468,9 @@ endef
 pr: ## Redo all codegen and basic checks, to ensure your PR will be able to run tests.  Recommended before opening a github PR
 	$Q $(if $(verbose),$(MAKE) tidy,$(call make_quietly,tidy))
 	$Q $(if $(verbose),$(MAKE) go-generate,$(call make_quietly,go-generate))
-	$Q $(if $(verbose),$(MAKE) copyright,$(call make_quietly,copyright))
 	$Q $(if $(verbose),$(MAKE) fmt,$(call make_quietly,fmt))
 	$Q $(if $(verbose),$(MAKE) lint,$(call make_quietly,lint))
+# 	$Q $(if $(verbose),$(MAKE) copyright,$(call make_quietly,copyright))
 
 # ====================================
 # binaries to build
@@ -532,9 +533,9 @@ go-generate: $(BIN)/mockgen $(BIN)/enumer $(BIN)/mockery  $(BIN)/gowrap ## Run `
 	$Q echo "running go generate ./..., this takes a minute or more..."
 	$Q # add our bins to PATH so `go generate` can find them
 	$Q $(BIN_PATH) go generate $(if $(verbose),-v) ./...
-	$Q echo "updating copyright headers"
-	$Q $(MAKE) --no-print-directory copyright
 	$Q $(MAKE) --no-print-directory fmt
+# 	$Q echo "updating copyright headers"
+# 	$Q $(MAKE) --no-print-directory copyright
 
 release: ## Re-generate generated code and run tests
 	$(MAKE) --no-print-directory go-generate
@@ -612,6 +613,7 @@ INTEG_COVER_FILE                := $(COVER_ROOT)/integ_$(PERSISTENCE_TYPE)_$(PER
 INTEG_COVER_FILE_CASS           := $(COVER_ROOT)/integ_cassandra__cover.out
 INTEG_COVER_FILE_MYSQL          := $(COVER_ROOT)/integ_sql_mysql_cover.out
 INTEG_COVER_FILE_POSTGRES       := $(COVER_ROOT)/integ_sql_postgres_cover.out
+INTEG_COVER_FILE_ETCD           := $(COVER_ROOT)/integ_etcd_cover.out
 
 INTEG_NDC_COVER_FILE            := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_TYPE)_$(PERSISTENCE_PLUGIN)_cover.out
 INTEG_NDC_COVER_FILE_CASS       := $(COVER_ROOT)/integ_ndc_cassandra__cover.out
@@ -680,6 +682,20 @@ cover_integration_profile:
 	$Q time go test $(INTEG_TEST_ROOT) $(TEST_ARG) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -sqlPluginName=$(PERSISTENCE_PLUGIN) $(GOCOVERPKG_ARG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1;
 	$Q cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE)
 
+integration_tests_etcd:
+	$Q mkdir -p $(BUILD)
+	$Q mkdir -p $(COVER_ROOT)
+	$Q echo "mode: atomic" > $(INTEG_COVER_FILE_ETCD)
+
+	$Q echo "Running integration tests with etcd"
+	$Q mkdir -p $(BUILD)/$(INTEG_TEST_DIR)
+	$Q (ETCD_TEST_DIRS=$$(find . -name "*_test.go" -exec grep -l "testflags.RequireEtcd" {} \; | xargs -n1 dirname | sort | uniq); \
+		echo "Found etcd test directories:"; \
+		echo "$$ETCD_TEST_DIRS"; \
+		echo "Using ETCD_ENDPOINTS='$(ETCD_ENDPOINTS)'"; \
+		ETCD=1 ETCD_ENDPOINTS="$(ETCD_ENDPOINTS)" time go test $$ETCD_TEST_DIRS $(TEST_ARG) $(TEST_TAG) -coverprofile=$(BUILD)/$(INTEG_TEST_DIR)/coverage.out || exit 1)
+	$Q cat $(BUILD)/$(INTEG_TEST_DIR)/coverage.out | grep -v "^mode: \w\+" >> $(INTEG_COVER_FILE_ETCD)
+
 cover_ndc_profile:
 	$Q mkdir -p $(BUILD)
 	$Q mkdir -p $(COVER_ROOT)
@@ -699,6 +715,7 @@ $(COVER_ROOT)/cover.out: $(UNIT_COVER_FILE) $(INTEG_COVER_FILE_CASS) $(INTEG_COV
 	cat $(INTEG_NDC_COVER_FILE_CASS) | grep -v "^mode: \w\+" | grep -vP ".gen|_generated|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 	cat $(INTEG_NDC_COVER_FILE_MYSQL) | grep -v "^mode: \w\+" | grep -vP ".gen|_generated|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 	cat $(INTEG_NDC_COVER_FILE_POSTGRES) | grep -v "^mode: \w\+" | grep -vP ".gen|_generated|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
+	cat $(INTEG_COVER_FILE_ETCD) | grep -v "^mode: \w\+" | grep -vP ".gen|_generated|[Mm]ock[s]?" >> $(COVER_ROOT)/cover.out
 
 cover: $(COVER_ROOT)/cover.out
 	go tool cover -html=$(COVER_ROOT)/cover.out;

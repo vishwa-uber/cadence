@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/types"
 )
 
@@ -53,7 +54,7 @@ type (
 		isRetryable    IsRetryable
 		throttlePolicy RetryPolicy
 		isThrottle     IsRetryable
-		clock          Clock
+		clock          clock.TimeSource
 	}
 )
 
@@ -99,7 +100,7 @@ func (c *ConcurrentRetrier) Failed() {
 
 // NewConcurrentRetrier returns an instance of concurrent backoff retrier.
 func NewConcurrentRetrier(retryPolicy RetryPolicy) *ConcurrentRetrier {
-	retrier := NewRetrier(retryPolicy, SystemClock)
+	retrier := NewRetrier(retryPolicy, clock.NewRealTimeSource())
 	return &ConcurrentRetrier{retrier: retrier}
 }
 
@@ -120,7 +121,7 @@ func NewThrottleRetry(opts ...ThrottleRetryOption) *ThrottleRetry {
 			_, ok := err.(*types.ServiceBusyError)
 			return ok
 		},
-		clock: SystemClock,
+		clock: clock.NewRealTimeSource(),
 	}
 	for _, opt := range opts {
 		opt(tr)
@@ -153,6 +154,12 @@ func WithRetryableError(isRetryable IsRetryable) ThrottleRetryOption {
 func WithThrottleError(isThrottle IsRetryable) ThrottleRetryOption {
 	return func(tr *ThrottleRetry) {
 		tr.isThrottle = isThrottle
+	}
+}
+
+func WithClock(clock clock.TimeSource) ThrottleRetryOption {
+	return func(tr *ThrottleRetry) {
+		tr.clock = clock
 	}
 }
 
@@ -204,7 +211,7 @@ func (tr *ThrottleRetry) Do(ctx context.Context, op Operation) error {
 				return prevErr
 			}
 			return err
-		case <-time.After(next):
+		case <-tr.clock.After(next):
 		}
 	}
 }

@@ -28,8 +28,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"go.uber.org/mock/gomock"
 
+	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/types"
 )
 
@@ -274,6 +276,143 @@ func TestDescribeDomain(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				tc.verifyResp(t, resp)
+			}
+		})
+	}
+}
+
+func TestDeleteDomain(t *testing.T) {
+	domainName := "domain-name"
+	testCases := []struct {
+		name          string
+		req           *types.DeleteDomainRequest
+		setupMocks    func(*mockDeps)
+		expectError   bool
+		expectedError string
+	}{
+		{
+			name: "success_delete_deprecated_domain",
+			req: &types.DeleteDomainRequest{
+				Name: domainName,
+			},
+			setupMocks: func(deps *mockDeps) {
+				deps.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return("testDomainID", nil).AnyTimes()
+				deps.mockRequestValidator.EXPECT().ValidateDeleteDomainRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockRequestValidator.EXPECT().ValidateListWorkflowExecutionsRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockDomainHandler.EXPECT().DescribeDomain(gomock.Any(), &types.DescribeDomainRequest{
+					Name: &domainName,
+				}).Return(&types.DescribeDomainResponse{
+					DomainInfo: &types.DomainInfo{
+						Name:   "deprecated-domain",
+						Status: types.DomainStatusDeprecated.Ptr(),
+					},
+				}, nil)
+				deps.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything, mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{Executions: []*types.WorkflowExecutionInfo{}}, nil)
+				deps.mockDomainHandler.EXPECT().DeleteDomain(gomock.Any(), gomock.Any()).Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name: "failure_domain_not_found",
+			req: &types.DeleteDomainRequest{
+				Name: domainName,
+			},
+			setupMocks: func(deps *mockDeps) {
+				deps.mockRequestValidator.EXPECT().ValidateDeleteDomainRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockDomainHandler.EXPECT().DescribeDomain(gomock.Any(), &types.DescribeDomainRequest{
+					Name: &domainName,
+				}).Return(nil, errors.New("domain not found"))
+			},
+			expectError:   true,
+			expectedError: "domain not found",
+		},
+		{
+			name: "failure_domain_not_deprecated",
+			req: &types.DeleteDomainRequest{
+				Name: domainName,
+			},
+			setupMocks: func(deps *mockDeps) {
+				deps.mockRequestValidator.EXPECT().ValidateDeleteDomainRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockDomainHandler.EXPECT().DescribeDomain(gomock.Any(), &types.DescribeDomainRequest{
+					Name: &domainName,
+				}).Return(&types.DescribeDomainResponse{
+					DomainInfo: &types.DomainInfo{
+						Name:   "active-domain",
+						Status: types.DomainStatusRegistered.Ptr(),
+					},
+				}, nil)
+			},
+			expectError:   true,
+			expectedError: "Domain is not in a deprecated state.",
+		},
+		{
+			name: "failure_domain_has_workflow_history",
+			req: &types.DeleteDomainRequest{
+				Name: domainName,
+			},
+			setupMocks: func(deps *mockDeps) {
+				deps.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return("testDomainID", nil).AnyTimes()
+				deps.mockRequestValidator.EXPECT().ValidateDeleteDomainRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockRequestValidator.EXPECT().ValidateListWorkflowExecutionsRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockDomainHandler.EXPECT().DescribeDomain(gomock.Any(), &types.DescribeDomainRequest{
+					Name: &domainName,
+				}).Return(&types.DescribeDomainResponse{
+					DomainInfo: &types.DomainInfo{
+						Name:   "domain-with-history",
+						Status: types.DomainStatusDeprecated.Ptr(),
+					},
+				}, nil)
+				deps.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything, mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{
+					Executions: []*types.WorkflowExecutionInfo{
+						{
+							Execution: &types.WorkflowExecution{
+								WorkflowID: "test-workflow",
+								RunID:      "test-run",
+							},
+						},
+					},
+				}, nil)
+			},
+			expectError:   true,
+			expectedError: "Domain still have workflow execution history.",
+		},
+		{
+			name: "failure_delete_domain_error",
+			req: &types.DeleteDomainRequest{
+				Name: domainName,
+			},
+			setupMocks: func(deps *mockDeps) {
+				deps.mockDomainCache.EXPECT().GetDomainID(gomock.Any()).Return("testDomainID", nil).AnyTimes()
+				deps.mockRequestValidator.EXPECT().ValidateDeleteDomainRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockRequestValidator.EXPECT().ValidateListWorkflowExecutionsRequest(gomock.Any(), gomock.Any()).Return(nil)
+				deps.mockDomainHandler.EXPECT().DescribeDomain(gomock.Any(), &types.DescribeDomainRequest{
+					Name: &domainName,
+				}).Return(&types.DescribeDomainResponse{
+					DomainInfo: &types.DomainInfo{
+						Name:   "deprecated-domain",
+						Status: types.DomainStatusDeprecated.Ptr(),
+					},
+				}, nil)
+				deps.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything, mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{
+					Executions: []*types.WorkflowExecutionInfo{},
+				}, nil)
+				deps.mockDomainHandler.EXPECT().DeleteDomain(gomock.Any(), gomock.Any()).Return(errors.New("delete domain error"))
+			},
+			expectError:   true,
+			expectedError: "delete domain error",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh, deps := setupMocksForWorkflowHandler(t)
+			tc.setupMocks(deps)
+
+			err := wh.DeleteDomain(context.Background(), tc.req)
+			if tc.expectError {
+				assert.ErrorContains(t, err, tc.expectedError)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

@@ -225,7 +225,7 @@ func NewManager(
 	}
 	var fwdr Forwarder
 	if tlMgr.isFowardingAllowed(taskList, *taskListKind) {
-		fwdr = newForwarder(&taskListConfig.ForwarderConfig, taskList, *taskListKind, matchingClient, isolationGroups, scope)
+		fwdr = newForwarder(&taskListConfig.ForwarderConfig, taskList, *taskListKind, matchingClient, scope)
 	}
 	numReadPartitionsFn := func(cfg *config.TaskListConfig) int {
 		if cfg.EnableGetNumberOfPartitionsFromCache() {
@@ -610,7 +610,7 @@ func (c *taskListManagerImpl) DispatchTask(ctx context.Context, task *InternalTa
 	}
 
 	// optional configuration to enable cleanup of tasks, in the standby cluster, that have already been started
-	if c.config.EnableStandbyTaskCompletion() {
+	if c.config.EnableStandbyTaskCompletion() && !domainEntry.GetReplicationConfig().IsActiveActive() {
 		if err := c.taskCompleter.CompleteTaskIfStarted(ctx, task); err != nil {
 			if errors.Is(err, errDomainIsActive) {
 				return c.matcher.MustOffer(ctx, task)

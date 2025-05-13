@@ -1016,6 +1016,26 @@ func ToDecisionTaskTimedOutEventAttributes(t *apiv1.DecisionTaskTimedOutEventAtt
 	}
 }
 
+func FromDeleteDomainRequest(t *types.DeleteDomainRequest) *apiv1.DeleteDomainRequest {
+	if t == nil {
+		return nil
+	}
+	return &apiv1.DeleteDomainRequest{
+		Name:          t.Name,
+		SecurityToken: t.SecurityToken,
+	}
+}
+
+func ToDeleteDomainRequest(t *apiv1.DeleteDomainRequest) *types.DeleteDomainRequest {
+	if t == nil {
+		return nil
+	}
+	return &types.DeleteDomainRequest{
+		Name:          t.Name,
+		SecurityToken: t.SecurityToken,
+	}
+}
+
 func FromDeprecateDomainRequest(t *types.DeprecateDomainRequest) *apiv1.DeprecateDomainRequest {
 	if t == nil {
 		return nil

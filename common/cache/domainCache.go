@@ -80,6 +80,10 @@ type (
 	// it is guaranteed that  CallbackFn pair will be both called or non will be called
 	CallbackFn func(updatedDomains []*DomainCacheEntry)
 
+	// CatchUpFn is a function to execute PrepareCallbackFn and/or CallbackFn during domain callback registration,
+	// allowing the caller to catch up with the latest domain changes
+	CatchUpFn func(domainCache DomainCache, prepareCallback PrepareCallbackFn, callback CallbackFn)
+
 	// DomainCache is used the cache domain information and configuration to avoid making too many calls to cassandra.
 	// This cache is mainly used by frontend for resolving domain names to domain uuids which are used throughout the
 	// system.  Each domain entry is kept in the cache for one hour but also has an expiry of 10 seconds.  This results
@@ -87,8 +91,8 @@ type (
 	// requests using the stale entry from cache upto an hour
 	DomainCache interface {
 		common.Daemon
-		RegisterDomainChangeCallback(shard int, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
-		UnregisterDomainChangeCallback(shard int)
+		RegisterDomainChangeCallback(id string, catchUpFn CatchUpFn, prepareCallback PrepareCallbackFn, callback CallbackFn)
+		UnregisterDomainChangeCallback(id string)
 		GetDomain(name string) (*DomainCacheEntry, error)
 		GetDomainByID(id string) (*DomainCacheEntry, error)
 		GetDomainID(name string) (string, error)
@@ -117,8 +121,8 @@ type (
 		lastCallbackEmitTime time.Time
 
 		callbackLock     sync.Mutex
-		prepareCallbacks map[int]PrepareCallbackFn
-		callbacks        map[int]CallbackFn
+		prepareCallbacks map[string]PrepareCallbackFn
+		callbacks        map[string]CallbackFn
 
 		throttleRetry *backoff.ThrottleRetry
 	}
@@ -178,8 +182,8 @@ func NewDomainCache(
 		timeSource:       clock.NewRealTimeSource(),
 		scope:            metricsClient.Scope(metrics.DomainCacheScope),
 		logger:           logger,
-		prepareCallbacks: make(map[int]PrepareCallbackFn),
-		callbacks:        make(map[int]CallbackFn),
+		prepareCallbacks: make(map[string]PrepareCallbackFn),
+		callbacks:        make(map[string]CallbackFn),
 		throttleRetry:    throttleRetry,
 	}
 	cache.cacheNameToID.Store(newDomainCache())
@@ -317,49 +321,31 @@ func (c *DefaultDomainCache) GetAllDomain() map[string]*DomainCacheEntry {
 // make sure the callback function will not call domain cache again in case of dead lock
 // afterCallback will be invoked when NOT holding the domain cache lock.
 func (c *DefaultDomainCache) RegisterDomainChangeCallback(
-	shard int,
-	initialNotificationVersion int64,
+	id string,
+	catchUpFn CatchUpFn,
 	prepareCallback PrepareCallbackFn,
 	callback CallbackFn,
 ) {
 
 	c.callbackLock.Lock()
-	c.prepareCallbacks[shard] = prepareCallback
-	c.callbacks[shard] = callback
+	c.prepareCallbacks[id] = prepareCallback
+	c.callbacks[id] = callback
 	c.callbackLock.Unlock()
 
-	// this section is trying to make the shard catch up with domain changes
-	domains := DomainCacheEntries{}
-	for _, domain := range c.GetAllDomain() {
-		domains = append(domains, domain)
-	}
-	// we mush notify the change in a ordered fashion
-	// since history shard have to update the shard info
-	// with domain change version.
-	sort.Sort(domains)
+	catchUpFn(c, prepareCallback, callback)
 
-	var updatedEntries []*DomainCacheEntry
-	for _, domain := range domains {
-		if domain.notificationVersion >= initialNotificationVersion {
-			updatedEntries = append(updatedEntries, domain)
-		}
-	}
-	if len(updatedEntries) > 0 {
-		prepareCallback()
-		callback(updatedEntries)
-	}
 }
 
 // UnregisterDomainChangeCallback delete a domain failover callback
 func (c *DefaultDomainCache) UnregisterDomainChangeCallback(
-	shard int,
+	id string,
 ) {
 
 	c.callbackLock.Lock()
 	defer c.callbackLock.Unlock()
 
-	delete(c.prepareCallbacks, shard)
-	delete(c.callbacks, shard)
+	delete(c.prepareCallbacks, id)
+	delete(c.callbacks, id)
 }
 
 // GetDomain retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -533,6 +519,7 @@ UpdateLoop:
 	if now.Sub(c.lastCallbackEmitTime) > 30*time.Minute {
 		c.lastCallbackEmitTime = now
 		c.scope.AddCounter(metrics.DomainCacheCallbacksCount, int64(len(c.callbacks)))
+		c.scope.RecordHistogramDuration(metrics.DomainCacheUpdateLatency, c.timeSource.Now().Sub(now))
 	}
 
 	return nil
