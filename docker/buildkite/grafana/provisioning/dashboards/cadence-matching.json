@@ -118,11 +118,11 @@
                 "uid": "PBFA97CFB590B2093"
               },
               "disableTextWrap": false,
-              "editorMode": "code",
+              "editorMode": "builder",
               "expr": "sum by(operation) (rate(cadence_requests{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
               "fullMetaSearch": false,
               "includeNullMetadata": false,
-              "legendFormat": "__auto",
+              "legendFormat": "{{operation}} (request)",
               "range": true,
               "refId": "A",
               "useBackend": false
@@ -133,13 +133,14 @@
                 "uid": "PBFA97CFB590B2093"
               },
               "disableTextWrap": false,
-              "editorMode": "builder",
+              "editorMode": "code",
               "expr": "sum by(operation) (rate(cadence_errors_entity_not_exists{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": false,
               "instant": false,
-              "legendFormat": "__auto",
+              "interval": "",
+              "legendFormat": "{{operation}} (error)",
               "range": true,
               "refId": "B",
               "useBackend": false
@@ -313,7 +314,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 57
+            "y": 185
           },
           "id": 3,
           "options": {
@@ -364,7 +365,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "Milli Seconds",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -413,7 +414,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 57
+            "y": 185
           },
           "id": 4,
           "options": {
@@ -434,7 +435,7 @@
             {
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cadence_latency_bucket{cadence_service=\"cadence_matching\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by(le, operation) (rate(cadence_latency_bucket{cadence_service=\"cadence_matching\"}[$__rate_interval])))",
               "fullMetaSearch": false,
               "includeNullMetadata": false,
               "legendFormat": "__auto",
@@ -509,7 +510,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 65
+            "y": 193
           },
           "id": 5,
           "options": {
@@ -670,7 +671,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -881,7 +882,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1079,7 +1080,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1277,7 +1278,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1393,7 +1394,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "sec",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1442,7 +1443,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 3
           },
           "id": 16,
           "options": {
@@ -1462,11 +1463,11 @@
           "targets": [
             {
               "disableTextWrap": false,
-              "editorMode": "builder",
+              "editorMode": "code",
               "expr": "sum by(operation) (changes(poll_success_per_tl{operation=\"TaskListMgr\", domain=\"$domain\", \"$services\"=\"$services\"}[$__interval]))",
               "fullMetaSearch": false,
               "includeNullMetadata": true,
-              "legendFormat": "__auto",
+              "legendFormat": "{{operation}} (async)",
               "range": true,
               "refId": "A",
               "useBackend": false
@@ -1477,13 +1478,13 @@
                 "uid": "PBFA97CFB590B2093"
               },
               "disableTextWrap": false,
-              "editorMode": "builder",
+              "editorMode": "code",
               "expr": "sum by(operation) (changes(poll_success_sync_per_tl{cadence_service=\"$services\", domain=\"$domain\"}[$__interval]))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": true,
               "instant": false,
-              "legendFormat": "__auto",
+              "legendFormat": "{{operation}} (sync)",
               "range": true,
               "refId": "B",
               "useBackend": false
@@ -1494,13 +1495,13 @@
                 "uid": "PBFA97CFB590B2093"
               },
               "disableTextWrap": false,
-              "editorMode": "builder",
+              "editorMode": "code",
               "expr": "sum by(operation) (rate(poll_timeouts_per_tl{operation=\"TaskListMgr\", cadence_service=\"$services\", domain=\"$domain\"}[$__rate_interval]))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": false,
               "instant": false,
-              "legendFormat": "__auto",
+              "legendFormat": "{{operation}} (poll_timeouts)",
               "range": true,
               "refId": "C",
               "useBackend": false
@@ -1572,7 +1573,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 3
           },
           "id": 17,
           "options": {
@@ -1625,7 +1626,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1674,7 +1675,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 27
           },
           "id": 19,
           "options": {
@@ -1699,7 +1700,7 @@
               },
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cadence_latency_per_tl_bucket{operation=\"AddActivityTask\", domain=\"$domain\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.95, avg by(le, operation) (rate(cadence_latency_per_tl_bucket{operation=\"AddActivityTask\", domain=\"$domain\"}[$__rate_interval])))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": false,
@@ -1776,7 +1777,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 81
+            "y": 27
           },
           "id": 18,
           "options": {
@@ -1829,7 +1830,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -1878,7 +1879,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 89
+            "y": 35
           },
           "id": 20,
           "options": {
@@ -1980,7 +1981,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 89
+            "y": 35
           },
           "id": 22,
           "options": {
@@ -2017,108 +2018,6 @@
             }
           ],
           "title": "PollForActivityTask QPS (forwarding requests excluded)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 97
-          },
-          "id": 21,
-          "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "hideZeros": false,
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "11.6.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "PBFA97CFB590B2093"
-              },
-              "disableTextWrap": false,
-              "editorMode": "builder",
-              "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cadence_latency_per_tl_bucket{operation=\"AddActivityTask\", domain=\"$domain\"}[$__rate_interval])))",
-              "fullMetaSearch": false,
-              "hide": false,
-              "includeNullMetadata": false,
-              "instant": false,
-              "legendFormat": "__auto",
-              "range": true,
-              "refId": "A",
-              "useBackend": false
-            }
-          ],
-          "title": "AddActivityTask Latency(p99) (forwarding requests excluded)",
           "type": "timeseries"
         }
       ],
@@ -2198,7 +2097,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 76
           },
           "id": 24,
           "options": {
@@ -2218,13 +2117,30 @@
           "targets": [
             {
               "disableTextWrap": false,
-              "editorMode": "code",
+              "editorMode": "builder",
               "expr": "sum by(operation) (rate(persistence_requests{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
               "fullMetaSearch": false,
               "includeNullMetadata": false,
-              "legendFormat": "__auto",
+              "legendFormat": "{{operation}} (request)",
               "range": true,
               "refId": "A",
+              "useBackend": false
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PBFA97CFB590B2093"
+              },
+              "disableTextWrap": false,
+              "editorMode": "builder",
+              "expr": "sum by(operation) (rate(persistence_errors{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
+              "fullMetaSearch": false,
+              "hide": false,
+              "includeNullMetadata": false,
+              "instant": false,
+              "legendFormat": "{{operation}} (error)",
+              "range": true,
+              "refId": "B",
               "useBackend": false
             }
           ],
@@ -2245,7 +2161,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "sec",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -2294,7 +2210,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 76
           },
           "id": 25,
           "options": {
@@ -2390,13 +2306,38 @@
                 ]
               }
             },
-            "overrides": []
+            "overrides": [
+              {
+                "__systemRef": "hideSeriesFrom",
+                "matcher": {
+                  "id": "byNames",
+                  "options": {
+                    "mode": "exclude",
+                    "names": [
+                      "GetTaskListSize"
+                    ],
+                    "prefix": "All except:",
+                    "readOnly": true
+                  }
+                },
+                "properties": [
+                  {
+                    "id": "custom.hideFrom",
+                    "value": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": true
+                    }
+                  }
+                ]
+              }
+            ]
           },
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 84
           },
           "id": 26,
           "options": {
@@ -2417,7 +2358,7 @@
             {
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "sum by(operation) (rate(persistence_errors_entity_not_exists{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
+              "expr": "sum by(operation) (rate(persistence_errors{cadence_service=\"cadence_matching\"}[$__rate_interval]))",
               "fullMetaSearch": false,
               "includeNullMetadata": false,
               "legendFormat": "__auto",
@@ -2506,7 +2447,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 5
           },
           "id": 28,
           "options": {
@@ -2553,7 +2494,7 @@
                 "axisBorderShow": false,
                 "axisCenteredZero": false,
                 "axisColorMode": "text",
-                "axisLabel": "",
+                "axisLabel": "ms",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
                 "barWidthFactor": 0.6,
@@ -2602,7 +2543,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 5
           },
           "id": 30,
           "options": {
@@ -2623,7 +2564,7 @@
             {
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "histogram_quantile(0.95, sum by(le, operation) (rate(cadence_client_latency_bucket{cadence_service=\"cadence_matching\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.99, sum by(le, operation) (rate(cadence_client_latency_bucket{cadence_service=\"cadence_matching\"}[$__rate_interval])))",
               "fullMetaSearch": false,
               "includeNullMetadata": false,
               "legendFormat": "__auto",
@@ -2698,7 +2639,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 81
+            "y": 29
           },
           "id": 29,
           "options": {
@@ -2814,7 +2755,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 73
+            "y": 6
           },
           "id": 32,
           "options": {
@@ -2839,7 +2780,7 @@
               },
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "sum by(tasklist, domain) (changes(task_count_per_tl{tasklistType=\"activity\", cadence_service=\"cadence_matching\", domain=\"$domain\"}[$__interval]))",
+              "expr": "sum by(tasklist) (changes(task_count_per_tl{tasklistType=\"activity\", cadence_service=\"cadence_matching\", domain=\"$domain\"}[$__interval]))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": true,
@@ -2916,7 +2857,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 73
+            "y": 6
           },
           "id": 33,
           "options": {
@@ -2941,7 +2882,7 @@
               },
               "disableTextWrap": false,
               "editorMode": "builder",
-              "expr": "sum by(tasklist, domain) (changes(task_backlog_per_tl{tasklistType=\"decision\", cadence_service=\"cadence_matching\", domain=\"$domain\"}[$__interval]))",
+              "expr": "sum by(tasklist) (changes(task_backlog_per_tl{tasklistType=\"decision\", cadence_service=\"cadence_matching\", domain=\"$domain\"}[$__interval]))",
               "fullMetaSearch": false,
               "hide": false,
               "includeNullMetadata": true,
@@ -3625,7 +3566,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 1
+            "y": 8
           },
           "id": 42,
           "options": {
@@ -3721,7 +3662,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 1
+            "y": 8
           },
           "id": 43,
           "options": {
@@ -3817,7 +3758,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 16
           },
           "id": 44,
           "options": {
@@ -3913,7 +3854,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 16
           },
           "id": 45,
           "options": {
@@ -4009,7 +3950,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 24
           },
           "id": 46,
           "options": {
@@ -4105,7 +4046,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 24
           },
           "id": 47,
           "options": {
@@ -4231,5 +4172,5 @@
   "timezone": "browser",
   "title": "Cadence Matching",
   "uid": "del7jwba0qgw0e",
-  "version": 6
+  "version": 1
 }
