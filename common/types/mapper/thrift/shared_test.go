@@ -952,6 +952,20 @@ func TestDecisionTypeConversion(t *testing.T) {
 	}
 }
 
+func TestDeleteDomainRequestConversion(t *testing.T) {
+	testCases := []*types.DeleteDomainRequest{
+		nil,
+		{},
+		&testdata.DeleteDomainRequest,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromDeleteDomainRequest(original)
+		roundTripObj := ToDeleteDomainRequest(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+}
+
 func TestDeprecateDomainRequestConversion(t *testing.T) {
 	testCases := []*types.DeprecateDomainRequest{
 		nil,
@@ -3423,4 +3437,74 @@ func TestAny(t *testing.T) {
 			return "filled data"
 		})
 	})
+}
+
+func TestTaskKeyConversion(t *testing.T) {
+	testCases := []*types.TaskKey{
+		nil,
+		&types.TaskKey{},
+		&testdata.TaskKey,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromTaskKey(original)
+		roundTripObj := ToTaskKey(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+}
+
+func TestTaskRangeConversion(t *testing.T) {
+	testCases := []*types.TaskRange{
+		nil,
+		&types.TaskRange{},
+		&testdata.TaskRange,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromTaskRange(original)
+		roundTripObj := ToTaskRange(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+}
+
+func TestVirtualSliceStateConversion(t *testing.T) {
+	testCases := []*types.VirtualSliceState{
+		nil,
+		&types.VirtualSliceState{},
+		&testdata.VirtualSliceState,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromVirtualSliceState(original)
+		roundTripObj := ToVirtualSliceState(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+}
+
+func TestVirtualQueueStateConversion(t *testing.T) {
+	testCases := []*types.VirtualQueueState{
+		nil,
+		&types.VirtualQueueState{},
+		&testdata.VirtualQueueState,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromVirtualQueueState(original)
+		roundTripObj := ToVirtualQueueState(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+}
+
+func TestQueueStateConversion(t *testing.T) {
+	testCases := []*types.QueueState{
+		nil,
+		&types.QueueState{},
+		&testdata.QueueState,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromQueueState(original)
+		roundTripObj := ToQueueState(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
 }

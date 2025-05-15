@@ -53,6 +53,10 @@ var (
 type (
 	// Handler is the domain operation handler
 	Handler interface {
+		DeleteDomain(
+			ctx context.Context,
+			deleteRequest *types.DeleteDomainRequest,
+		) error
 		DeprecateDomain(
 			ctx context.Context,
 			deprecateRequest *types.DeprecateDomainRequest,
@@ -585,6 +589,31 @@ func (d *handlerImpl) UpdateDomain(
 		tag.WorkflowDomainID(info.ID),
 	)
 	return response, nil
+}
+
+// DeleteDomain deletes a domain
+func (d *handlerImpl) DeleteDomain(
+	ctx context.Context,
+	deleteRequest *types.DeleteDomainRequest,
+) error {
+	getResponse, err := d.domainManager.GetDomain(ctx, &persistence.GetDomainRequest{Name: deleteRequest.GetName()})
+	if err != nil {
+		return err
+	}
+	deleteReq := &persistence.DeleteDomainByNameRequest{
+		Name: getResponse.Info.Name,
+	}
+
+	err = d.domainManager.DeleteDomainByName(ctx, deleteReq)
+	if err != nil {
+		return err
+	}
+
+	d.logger.Info("Delete domain succeeded",
+		tag.WorkflowDomainName(getResponse.Info.Name),
+		tag.WorkflowDomainID(getResponse.Info.ID),
+	)
+	return nil
 }
 
 // DeprecateDomain deprecates a domain

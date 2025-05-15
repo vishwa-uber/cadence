@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/urfave/cli/v2"
 
 	"github.com/uber/cadence/client/admin"
@@ -38,8 +39,14 @@ import (
 	"github.com/uber/cadence/common/domain"
 	"github.com/uber/cadence/common/dynamicconfig/dynamicproperties"
 	"github.com/uber/cadence/common/types"
+	"github.com/uber/cadence/service/worker/domaindeprecation"
 	"github.com/uber/cadence/tools/common/commoncli"
 	"github.com/uber/cadence/tools/common/flag"
+)
+
+const (
+	decisionTimeoutInSeconds    = 5 * 60
+	workflowStartToCloseTimeout = 24 * 30 * 60 * 60 // 30 days
 )
 
 var (
@@ -300,48 +307,56 @@ func (d *domainCLIImpl) UpdateDomain(c *cli.Context) error {
 func (d *domainCLIImpl) DeprecateDomain(c *cli.Context) error {
 	domainName, err := getRequiredOption(c, FlagDomain)
 	if err != nil {
-		return commoncli.Problem("Required flag not found: ", err)
+		return commoncli.Problem("Required flag not provided: ", err)
 	}
-	securityToken := c.String(FlagSecurityToken)
-	force := c.Bool(FlagForce)
+
+	securityToken, err := getRequiredOption(c, FlagSecurityToken)
+	if err != nil {
+		return commoncli.Problem("Required flag not provided: ", err)
+	}
 
 	ctx, cancel, err := newContext(c)
 	defer cancel()
 	if err != nil {
 		return commoncli.Problem("Error in creating context: ", err)
 	}
-	if !force {
-		wfc, err := getWorkflowClient(c)
-		if err != nil {
-			return err
-		}
-		// check if there is any workflow in this domain, if exists, do not deprecate
-		wfs, _, err := listClosedWorkflow(wfc, 1, 0, time.Now().UnixNano(), domainName, "", "", workflowStatusNotSet, c)(nil)
-		if err != nil {
-			return commoncli.Problem("Operation DeprecateDomain failed: fail to list closed workflows: ", err)
-		}
-		if len(wfs) > 0 {
-			return commoncli.Problem("Operation DeprecateDomain failed.", errors.New("workflow history not cleared in this domain"))
-		}
-		wfs, _, err = listOpenWorkflow(wfc, 1, 0, time.Now().UnixNano(), domainName, "", "", c)(nil)
-		if err != nil {
-			return commoncli.Problem("Operation DeprecateDomain failed: fail to list open workflows: ", err)
-		}
-		if len(wfs) > 0 {
-			return commoncli.Problem("Operation DeprecateDomain failed.", errors.New("workflow still running in this domain"))
-		}
-	}
-	err = d.deprecateDomain(ctx, &types.DeprecateDomainRequest{
-		Name:          domainName,
-		SecurityToken: securityToken,
-	})
+
+	frontendClient, err := getDeps(c).ServerFrontendClient(c)
 	if err != nil {
-		if _, ok := err.(*types.EntityNotExistsError); !ok {
-			return commoncli.Problem("Operation DeprecateDomain failed.", err)
-		}
-		return commoncli.Problem(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		return err
 	}
-	fmt.Printf("Domain %s successfully deprecated.\n", domainName)
+
+	params := domaindeprecation.DomainDeprecationParams{
+		DomainName:    domainName,
+		SecurityToken: securityToken,
+	}
+	input, err := json.Marshal(params)
+	if err != nil {
+		return commoncli.Problem("Failed to encode domain deprecation parameters", err)
+	}
+
+	workflowID := uuid.NewRandom().String()
+	startRequest := &types.StartWorkflowExecutionRequest{
+		Domain:     constants.SystemLocalDomainName,
+		WorkflowID: fmt.Sprintf("domain-deprecation-%s-%s", domainName, workflowID),
+		WorkflowType: &types.WorkflowType{
+			Name: domaindeprecation.DomainDeprecationWorkflowTypeName,
+		},
+		TaskList: &types.TaskList{
+			Name: domaindeprecation.DomainDeprecationTaskListName,
+		},
+		ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32(workflowStartToCloseTimeout)),
+		TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(decisionTimeoutInSeconds),
+		RequestID:                           uuid.New(),
+		Input:                               input,
+	}
+
+	resp, err := frontendClient.StartWorkflowExecution(ctx, startRequest)
+	if err != nil {
+		return commoncli.Problem("Failed to start domain deprecation workflow", err)
+	}
+
+	fmt.Printf("Domain deprecation is in progress. Workflow ID: %s, Run ID: %s\n", startRequest.WorkflowID, resp.GetRunID())
 	return nil
 }
 
@@ -736,18 +751,6 @@ func (d *domainCLIImpl) updateDomain(
 	}
 
 	return d.domainHandler.UpdateDomain(ctx, request)
-}
-
-func (d *domainCLIImpl) deprecateDomain(
-	ctx context.Context,
-	request *types.DeprecateDomainRequest,
-) error {
-
-	if d.frontendClient != nil {
-		return d.frontendClient.DeprecateDomain(ctx, request)
-	}
-
-	return d.domainHandler.DeprecateDomain(ctx, request)
 }
 
 func (d *domainCLIImpl) describeDomain(

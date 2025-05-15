@@ -87,6 +87,10 @@ var (
 		FailoverVersion:          FailoverVersion1,
 		IsGlobalDomain:           true,
 	}
+	DeleteDomainRequest = types.DeleteDomainRequest{
+		Name:          DomainName,
+		SecurityToken: SecurityToken,
+	}
 	DeprecateDomainRequest = types.DeprecateDomainRequest{
 		Name:          DomainName,
 		SecurityToken: SecurityToken,

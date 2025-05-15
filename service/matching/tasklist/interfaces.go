@@ -83,7 +83,7 @@ type (
 		ForwardQueryTask(ctx context.Context, task *InternalTask) (*types.MatchingQueryWorkflowResponse, error)
 		ForwardPoll(ctx context.Context) (*InternalTask, error)
 		AddReqTokenC() <-chan *ForwarderReqToken
-		PollReqTokenC(isolationGroup string) <-chan *ForwarderReqToken
+		PollReqTokenC() <-chan *ForwarderReqToken
 	}
 
 	TaskCompleter interface {

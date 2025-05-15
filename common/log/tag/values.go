@@ -142,6 +142,11 @@ var (
 	ComponentRPCFactory                       = component("rpc-factory")
 	ComponentTaskListAdaptiveScaler           = component("task-list-adaptive-scaler")
 	ComponentActiveClusterManager             = component("active-cluster-manager")
+	ComponentMembershipResolver               = component("membership-resolver")
+	ComponentHashring                         = component("hashring")
+	ComponentNamespaceManager                 = component("shard-namespace-manager")
+	ComponentLeaderElection                   = component("shard-leader-election")
+	ComponentLeaderProcessor                  = component("shard-leader-processor")
 )
 
 // Predefined values for QueueTypes
@@ -333,6 +338,7 @@ var (
 	MaintainCorruptWorkflow                                   = clientOperation("maintain-corrupt-workflow")
 	AdminClientOperationUpdateTaskListPartitionConfig         = clientOperation("admin-update-task-list-partition-config")
 
+	FrontendClientOperationDeleteDomain                          = clientOperation("frontend-delete-domain")
 	FrontendClientOperationDeprecateDomain                       = clientOperation("frontend-deprecate-domain")
 	FrontendClientOperationDescribeDomain                        = clientOperation("frontend-describe-domain")
 	FrontendClientOperationDescribeTaskList                      = clientOperation("frontend-describe-task-list")

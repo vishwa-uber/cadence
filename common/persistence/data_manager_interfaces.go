@@ -348,6 +348,7 @@ type (
 		ClusterReplicationLevel       map[string]int64                  `json:"cluster_replication_level"`
 		DomainNotificationVersion     int64                             `json:"domain_notification_version"`
 		PendingFailoverMarkers        []*types.FailoverMarkerAttributes `json:"pending_failover_markers"`
+		QueueStates                   map[int32]*types.QueueState       `json:"queue_states"`
 	}
 
 	// WorkflowExecutionInfo describes a workflow execution
@@ -436,6 +437,15 @@ type (
 		RunID        string
 		State        int
 		CurrentRunID string
+	}
+
+	// FailoverLevel contains corresponding start / end level
+	FailoverLevel struct {
+		StartTime    time.Time
+		MinLevel     HistoryTaskKey
+		CurrentLevel HistoryTaskKey
+		MaxLevel     HistoryTaskKey
+		DomainIDs    map[string]struct{}
 	}
 
 	// TransferTaskInfo describes a transfer task
@@ -1933,25 +1943,83 @@ func (t *TimerTaskInfo) ToTask() (Task, error) {
 	}
 }
 
-// Copy returns a shallow copy of shardInfo
-func (s *ShardInfo) Copy() *ShardInfo {
+// TODO: it seems that we just need a nil safe shardInfo, deep copy is not necessary
+func (s *ShardInfo) ToNilSafeCopy() *ShardInfo {
+	if s == nil {
+		s = &ShardInfo{}
+	}
+	shardInfo := s.copy()
+	if shardInfo.ClusterTransferAckLevel == nil {
+		shardInfo.ClusterTransferAckLevel = make(map[string]int64)
+	}
+	if shardInfo.ClusterTimerAckLevel == nil {
+		shardInfo.ClusterTimerAckLevel = make(map[string]time.Time)
+	}
+	if shardInfo.ClusterReplicationLevel == nil {
+		shardInfo.ClusterReplicationLevel = make(map[string]int64)
+	}
+	if shardInfo.ReplicationDLQAckLevel == nil {
+		shardInfo.ReplicationDLQAckLevel = make(map[string]int64)
+	}
+	if shardInfo.TransferProcessingQueueStates == nil {
+		shardInfo.TransferProcessingQueueStates = &types.ProcessingQueueStates{
+			StatesByCluster: make(map[string][]*types.ProcessingQueueState),
+		}
+	}
+	if shardInfo.TimerProcessingQueueStates == nil {
+		shardInfo.TimerProcessingQueueStates = &types.ProcessingQueueStates{
+			StatesByCluster: make(map[string][]*types.ProcessingQueueState),
+		}
+	}
+	if shardInfo.QueueStates == nil {
+		shardInfo.QueueStates = make(map[int32]*types.QueueState)
+	}
+	return shardInfo
+}
+
+// copy returns a deep copy of shardInfo
+func (s *ShardInfo) copy() *ShardInfo {
 	// TODO: do we really need to deep copy those fields?
-	clusterTransferAckLevel := make(map[string]int64)
-	for k, v := range s.ClusterTransferAckLevel {
-		clusterTransferAckLevel[k] = v
+	var clusterTransferAckLevel map[string]int64
+	if s.ClusterTransferAckLevel != nil {
+		clusterTransferAckLevel = make(map[string]int64)
+		for k, v := range s.ClusterTransferAckLevel {
+			clusterTransferAckLevel[k] = v
+		}
 	}
-	clusterTimerAckLevel := make(map[string]time.Time)
-	for k, v := range s.ClusterTimerAckLevel {
-		clusterTimerAckLevel[k] = v
+
+	var clusterTimerAckLevel map[string]time.Time
+	if s.ClusterTimerAckLevel != nil {
+		clusterTimerAckLevel = make(map[string]time.Time)
+		for k, v := range s.ClusterTimerAckLevel {
+			clusterTimerAckLevel[k] = v
+		}
 	}
-	clusterReplicationLevel := make(map[string]int64)
-	for k, v := range s.ClusterReplicationLevel {
-		clusterReplicationLevel[k] = v
+
+	var clusterReplicationLevel map[string]int64
+	if s.ClusterReplicationLevel != nil {
+		clusterReplicationLevel = make(map[string]int64)
+		for k, v := range s.ClusterReplicationLevel {
+			clusterReplicationLevel[k] = v
+		}
 	}
-	replicationDLQAckLevel := make(map[string]int64)
-	for k, v := range s.ReplicationDLQAckLevel {
-		replicationDLQAckLevel[k] = v
+
+	var replicationDLQAckLevel map[string]int64
+	if s.ReplicationDLQAckLevel != nil {
+		replicationDLQAckLevel = make(map[string]int64)
+		for k, v := range s.ReplicationDLQAckLevel {
+			replicationDLQAckLevel[k] = v
+		}
 	}
+
+	var queueStates map[int32]*types.QueueState
+	if s.QueueStates != nil {
+		queueStates = make(map[int32]*types.QueueState)
+		for k, v := range s.QueueStates {
+			queueStates[k] = v.Copy()
+		}
+	}
+
 	return &ShardInfo{
 		ShardID:                       s.ShardID,
 		Owner:                         s.Owner,
@@ -1969,6 +2037,7 @@ func (s *ShardInfo) Copy() *ShardInfo {
 		ReplicationDLQAckLevel:        replicationDLQAckLevel,
 		PendingFailoverMarkers:        s.PendingFailoverMarkers,
 		UpdatedAt:                     s.UpdatedAt,
+		QueueStates:                   queueStates,
 	}
 }
 
@@ -2207,6 +2276,7 @@ func (p *TaskListPartition) ToInternalType() *types.TaskListPartition {
 	return &types.TaskListPartition{IsolationGroups: p.IsolationGroups}
 }
 
+// TODO(active-active): Update unit tests of all components that use this function to cover active-active case
 func (d *DomainReplicationConfig) IsActiveActive() bool {
 	return d != nil && d.ActiveClusters != nil
 }

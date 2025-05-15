@@ -83,7 +83,6 @@ type transferQueueProcessor struct {
 // NewTransferQueueProcessor creates a new transfer QueueProcessor
 func NewTransferQueueProcessor(
 	shard shard.Context,
-	historyEngine engine.Engine,
 	taskProcessor task.Processor,
 	executionCache execution.Cache,
 	workflowResetter reset.WorkflowResetter,
@@ -118,11 +117,16 @@ func NewTransferQueueProcessor(
 
 	standbyQueueProcessors := make(map[string]*transferQueueProcessorBase)
 	for clusterName := range shard.GetClusterMetadata().GetRemoteClusterInfo() {
+		// TODO: refactor ndc resender to use client.Bean and dynamically get the client
+		remoteAdminClient, err := shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
+		if err != nil {
+			logger.Fatal("Failed to get remote admin client for cluster", tag.Error(err))
+		}
 		historyResender := ndc.NewHistoryResender(
 			shard.GetDomainCache(),
-			shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+			remoteAdminClient,
 			func(ctx context.Context, request *types.ReplicateEventsV2Request) error {
-				return historyEngine.ReplicateEventsV2(ctx, request)
+				return shard.GetEngine().ReplicateEventsV2(ctx, request)
 			},
 			config.StandbyTaskReReplicationContextTimeout,
 			executionCheck,
@@ -150,7 +154,6 @@ func NewTransferQueueProcessor(
 
 	return &transferQueueProcessor{
 		shard:                  shard,
-		historyEngine:          historyEngine,
 		taskProcessor:          taskProcessor,
 		config:                 config,
 		currentClusterName:     currentClusterName,
@@ -158,7 +161,7 @@ func NewTransferQueueProcessor(
 		logger:                 logger,
 		status:                 common.DaemonStatusInitialized,
 		shutdownChan:           make(chan struct{}),
-		ackLevel:               shard.GetTransferAckLevel(),
+		ackLevel:               shard.GetQueueAckLevel(persistence.HistoryTaskCategoryTransfer).TaskID,
 		taskAllocator:          taskAllocator,
 		activeTaskExecutor:     activeTaskExecutor,
 		activeQueueProcessor:   activeQueueProcessor,
@@ -170,6 +173,9 @@ func (t *transferQueueProcessor) Start() {
 	if !atomic.CompareAndSwapInt32(&t.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
+
+	t.logger.Info("Starting transfer queue processor")
+	defer t.logger.Info("Transfer queue processor started")
 
 	t.activeQueueProcessor.Start()
 	for _, standbyQueueProcessor := range t.standbyQueueProcessors {
@@ -186,15 +192,22 @@ func (t *transferQueueProcessor) Stop() {
 	}
 
 	if !t.shard.GetConfig().QueueProcessorEnableGracefulSyncShutdown() {
+		t.logger.Info("Stopping transfer queue processor non-gracefully")
+		defer t.logger.Info("Transfer queue processor stopped non-gracefully")
 		t.activeQueueProcessor.Stop()
 		for _, standbyQueueProcessor := range t.standbyQueueProcessors {
 			standbyQueueProcessor.Stop()
 		}
 
 		close(t.shutdownChan)
-		common.AwaitWaitGroup(&t.shutdownWG, time.Minute)
+		if !common.AwaitWaitGroup(&t.shutdownWG, time.Minute) {
+			t.logger.Warn("transferQueueProcessor timed out on shut down", tag.LifeCycleStopTimedout)
+		}
 		return
 	}
+
+	t.logger.Info("Stopping transfer queue processor gracefully")
+	defer t.logger.Info("Transfer queue processor stopped gracefully")
 
 	// close the shutdown channel so processor pump goroutine drains tasks and then stop the processors
 	close(t.shutdownChan)
@@ -232,6 +245,10 @@ func (t *transferQueueProcessor) NotifyNewTask(clusterName string, info *hcommon
 }
 
 func (t *transferQueueProcessor) FailoverDomain(domainIDs map[string]struct{}) {
+	if t.shard.GetConfig().DisableTransferFailoverQueue() {
+		return
+	}
+
 	// Failover queue is used to scan all inflight tasks, if queue processor is not
 	// started, there's no inflight task and we don't need to create a failover processor.
 	// Also the HandleAction will be blocked if queue processor processing loop is not running.
@@ -239,10 +256,10 @@ func (t *transferQueueProcessor) FailoverDomain(domainIDs map[string]struct{}) {
 		return
 	}
 
-	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
+	minLevel := t.shard.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryTransfer, t.currentClusterName).TaskID
 	standbyClusterName := t.currentClusterName
 	for clusterName := range t.shard.GetClusterMetadata().GetEnabledClusterInfo() {
-		ackLevel := t.shard.GetTransferClusterAckLevel(clusterName)
+		ackLevel := t.shard.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryTransfer, clusterName).TaskID
 		if ackLevel < minLevel {
 			minLevel = ackLevel
 			standbyClusterName = clusterName
@@ -343,10 +360,12 @@ func (t *transferQueueProcessor) HandleAction(
 }
 
 func (t *transferQueueProcessor) LockTaskProcessing() {
+	t.logger.Debug("Transfer queue processor locking task processing")
 	t.taskAllocator.Lock()
 }
 
 func (t *transferQueueProcessor) UnlockTaskProcessing() {
+	t.logger.Debug("Transfer queue processor unlocking task processing")
 	t.taskAllocator.Unlock()
 }
 
@@ -359,6 +378,9 @@ func (t *transferQueueProcessor) drain() {
 
 func (t *transferQueueProcessor) completeTransferLoop() {
 	defer t.shutdownWG.Done()
+
+	t.logger.Info("Transfer queue processor completeTransferLoop")
+	defer t.logger.Info("Transfer queue processor completeTransferLoop completed")
 
 	completeTimer := time.NewTimer(t.config.TransferProcessorCompleteTransferInterval())
 	defer completeTimer.Stop()
@@ -383,7 +405,7 @@ func (t *transferQueueProcessor) completeTransferLoop() {
 					break
 				}
 
-				t.logger.Error("Failed to complete transfer task", tag.Error(err))
+				t.logger.Error("Failed to complete transfer task", tag.Error(err), tag.Attempt(int32(attempt)))
 				var errShardClosed *shard.ErrShardClosed
 				if errors.As(err, &errShardClosed) {
 					// shard closed, trigger shutdown and bail out
@@ -433,8 +455,8 @@ func (t *transferQueueProcessor) completeTransfer() error {
 		}
 	}
 
-	for _, failoverInfo := range t.shard.GetAllTransferFailoverLevels() {
-		failoverLevel := newTransferTaskKey(failoverInfo.MinLevel)
+	for _, failoverInfo := range t.shard.GetAllFailoverLevels(persistence.HistoryTaskCategoryTransfer) {
+		failoverLevel := newTransferTaskKey(failoverInfo.MinLevel.TaskID)
 		if newAckLevel == nil {
 			newAckLevel = failoverLevel
 		} else {
@@ -447,7 +469,7 @@ func (t *transferQueueProcessor) completeTransfer() error {
 	}
 
 	newAckLevelTaskID := newAckLevel.(transferTaskKey).taskID
-	t.logger.Debug(fmt.Sprintf("Start completing transfer task from: %v, to %v.", t.ackLevel, newAckLevelTaskID))
+	t.logger.Debugf("Start completing transfer task from: %v, to %v.", t.ackLevel, newAckLevelTaskID)
 	if t.ackLevel >= newAckLevelTaskID {
 		return nil
 	}
@@ -481,7 +503,9 @@ func (t *transferQueueProcessor) completeTransfer() error {
 
 	t.ackLevel = newAckLevelTaskID
 
-	return t.shard.UpdateTransferAckLevel(newAckLevelTaskID)
+	return t.shard.UpdateQueueAckLevel(persistence.HistoryTaskCategoryTransfer, persistence.HistoryTaskKey{
+		TaskID: newAckLevelTaskID,
+	})
 }
 
 func newTransferQueueActiveProcessor(
@@ -505,16 +529,18 @@ func newTransferQueueActiveProcessor(
 			logger.Info("Domain is not in registered status, skip task in active transfer queue.", tag.WorkflowDomainID(task.GetDomainID()), tag.Value(task))
 			return false, nil
 		}
-		return taskAllocator.VerifyActiveTask(task.GetDomainID(), task)
+		return taskAllocator.VerifyActiveTask(task.GetDomainID(), task.GetWorkflowID(), task.GetRunID(), task)
 	}
 
 	updateMaxReadLevel := func() task.Key {
-		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
+		return newTransferTaskKey(shard.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryTransfer, currentClusterName).TaskID)
 	}
 
 	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
-		return shard.UpdateTransferClusterAckLevel(currentClusterName, taskID)
+		return shard.UpdateQueueClusterAckLevel(persistence.HistoryTaskCategoryTransfer, currentClusterName, persistence.HistoryTaskKey{
+			TaskID: taskID,
+		})
 	}
 
 	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
@@ -581,16 +607,18 @@ func newTransferQueueStandbyProcessor(
 				return false, nil
 			}
 		}
-		return taskAllocator.VerifyStandbyTask(clusterName, task.GetDomainID(), task)
+		return taskAllocator.VerifyStandbyTask(clusterName, task.GetDomainID(), task.GetWorkflowID(), task.GetRunID(), task)
 	}
 
 	updateMaxReadLevel := func() task.Key {
-		return newTransferTaskKey(shard.GetTransferMaxReadLevel())
+		return newTransferTaskKey(shard.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryTransfer, clusterName).TaskID)
 	}
 
 	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
-		return shard.UpdateTransferClusterAckLevel(clusterName, taskID)
+		return shard.UpdateQueueClusterAckLevel(persistence.HistoryTaskCategoryTransfer, clusterName, persistence.HistoryTaskKey{
+			TaskID: taskID,
+		})
 	}
 
 	updateProcessingQueueStates := func(states []ProcessingQueueState) error {
@@ -647,7 +675,7 @@ func newTransferQueueFailoverProcessor(
 			logger.Info("Domain is not in registered status, skip task in failover transfer queue.", tag.WorkflowDomainID(task.GetDomainID()), tag.Value(task))
 			return false, nil
 		}
-		return taskAllocator.VerifyFailoverActiveTask(domainIDs, task.GetDomainID(), task)
+		return taskAllocator.VerifyFailoverActiveTask(domainIDs, task.GetDomainID(), task.GetWorkflowID(), task.GetRunID(), task)
 	}
 
 	maxReadLevelTaskKey := newTransferTaskKey(maxLevel)
@@ -657,20 +685,30 @@ func newTransferQueueFailoverProcessor(
 
 	updateClusterAckLevel := func(ackLevel task.Key) error {
 		taskID := ackLevel.(transferTaskKey).taskID
-		return shardContext.UpdateTransferFailoverLevel(
+		return shardContext.UpdateFailoverLevel(
+			persistence.HistoryTaskCategoryTransfer,
 			failoverUUID,
-			shard.TransferFailoverLevel{
-				StartTime:    shardContext.GetTimeSource().Now(),
-				MinLevel:     minLevel,
-				CurrentLevel: taskID,
-				MaxLevel:     maxLevel,
-				DomainIDs:    domainIDs,
+			persistence.FailoverLevel{
+				StartTime: shardContext.GetTimeSource().Now(),
+				MinLevel: persistence.HistoryTaskKey{
+					TaskID: minLevel,
+				},
+				CurrentLevel: persistence.HistoryTaskKey{
+					TaskID: taskID,
+				},
+				MaxLevel: persistence.HistoryTaskKey{
+					TaskID: maxLevel,
+				},
+				DomainIDs: domainIDs,
 			},
 		)
 	}
 
 	queueShutdown := func() error {
-		return shardContext.DeleteTransferFailoverLevel(failoverUUID)
+		return shardContext.DeleteFailoverLevel(
+			persistence.HistoryTaskCategoryTransfer,
+			failoverUUID,
+		)
 	}
 
 	processingQueueStates := []ProcessingQueueState{
@@ -704,7 +742,7 @@ func loadTransferProcessingQueueStates(
 	options *queueProcessorOptions,
 	logger log.Logger,
 ) []ProcessingQueueState {
-	ackLevel := shard.GetTransferClusterAckLevel(clusterName)
+	ackLevel := shard.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryTransfer, clusterName).TaskID
 	if options.EnableLoadQueueStates() {
 		pStates := shard.GetTransferProcessingQueueStates(clusterName)
 		if validateProcessingQueueStates(pStates, ackLevel) {

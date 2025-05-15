@@ -172,9 +172,9 @@ In the above example:
 - `wf1` is created on us-west. No external entity associations exist. Its tasks will have failover version of the active cluster in us-west specified in domain's `RegionToClusterMap` which is 0.
 - `wf2` is created with an external entity association. Its tasks will have failover version of following row in `EntityActiveRegion` table:
 <type=user-location, key=london> which is 5. Its tasks will be processed by cluster3 because version 5 maps to us-east region and cluster3 is active in us-east.
-- `wf3` is a long running workflow which was created when the domain was active-passive (migrated to active-active later on). It doesn't have an activeness metadata row in the executions table. Its existing tasks already have failover version of the cluster that it was active in so it will continue to be active in that cluster.
+- `wf3` is a long running workflow which was created when the domain was active-passive (migrated to active-active later on). It doesn't have an activeness metadata row in the executions table. Its existing tasks already have failover version of the cluster that it was active in so it will continue to be active in that cluster. Such workflows will continue to be processed with same failover version by the same cluster.
 
-TODO: How to come up with such version when loading mutable state of `wf3`?
+NOTE: Long running workflows of active-passive domains like `wf3` will required the active-active domain to include pre-migration ActiveClusterName in active cluster config. Migrating a domain from active-passive to active-active and removing existing ActiveClusterName from active cluster config will break such workflows.
 
 
 ### Domain records
@@ -184,11 +184,11 @@ Active-passive domains will not have this field set and ActiveClusterName field 
 
 ```
 {
-	// Clusters can be a subset of clusters in the group.
-	Clusters: 	    [us-west, us-east, eu-west, eu-central],
+    // Clusters can be a subset of clusters in the group.
+    Clusters: 	    [us-west, us-east, eu-west, eu-central],
 
-	// Active clusters can have at most one from each region. Remaining clusters will be considered passive.
-	ActiveClusters:  {
+    // Active clusters can have at most one from each region. Remaining clusters will be considered passive.
+    ActiveClusters:  {
         RegionToClusterMap: {
             us-west: {
                 ActiveClusterName: cluster0,
@@ -454,3 +454,19 @@ Domain/region entities are entities that are managed by default domain plugin as
 User defined entities are entities that are defined by the user and are used to associate workflows with an external entity. Corresponding watcher implementation will be provided by the user. It should perform CRUD operations on EntityActiveRegion table following similar pattern to domain/region entities.
 
 Entity updates are replicated to all clusters and history service will subscribe to these updates to notify task queues. This is similar to how domain failover changes are handled today. Notifying the task queues wake up the queues to resume processing and they will be able to apply active/standby logic based on new failover versions.
+
+
+## Limitations
+
+Below is a list of limitations of active-active domains.
+
+- **Passive side tasklist processing:** Tasklist processing will be disabled for workflows that are passive in a cluster.
+This is to avoid mixing tasklists of a domain with active and passive tasks. Instead, workflows will resume processing after failover by relying on decision/activity timeout tasks.
+Misconfigured (very high) timeout values can lead to workflows not being processed for a long time which is already a risk in active-passive mode.
+
+- **Workflow id conflict:** Multiple clusters can start workflows independently with the same workflow id. This can lead to conflicts in active-active mode.
+Conflict resolution mechanism should take care of this by terminating one of the workflows.
+
+- **External entity cardinality:** All cadence frontend and history services will have to make quick decisions on which cluster a workflow is active in. This requires caching all the domain data (already done for active-passive domains) and also caching the new entity region lookup table. This cache should be manageable in terms of memory usage so there will be a limit to the number of entities. Actual limit is going to be configurable based on available memory but ideally it should be in the order of thousands.
+
+- **Graceful failover:** Graceful failover is not supported for active-active domains. It is not a mode that is frequently used for active-passive domains either.

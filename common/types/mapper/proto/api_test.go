@@ -188,6 +188,11 @@ func TestDecisionTaskTimedOutEventAttributes(t *testing.T) {
 		assert.Equal(t, item, ToDecisionTaskTimedOutEventAttributes(FromDecisionTaskTimedOutEventAttributes(item)))
 	}
 }
+func TestDeleteDomainRequest(t *testing.T) {
+	for _, item := range []*types.DeleteDomainRequest{nil, {}, &testdata.DeleteDomainRequest} {
+		assert.Equal(t, item, ToDeleteDomainRequest(FromDeleteDomainRequest(item)))
+	}
+}
 func TestDeprecateDomainRequest(t *testing.T) {
 	for _, item := range []*types.DeprecateDomainRequest{nil, {}, &testdata.DeprecateDomainRequest} {
 		assert.Equal(t, item, ToDeprecateDomainRequest(FromDeprecateDomainRequest(item)))

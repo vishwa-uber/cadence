@@ -1585,6 +1585,20 @@ const (
 	DecisionTypeUpsertWorkflowSearchAttributes
 )
 
+// DeleteDomainRequest is an internal type (TBD...)
+type DeleteDomainRequest struct {
+	Name          string `json:"name,omitempty"`
+	SecurityToken string `json:"securityToken,omitempty"`
+}
+
+// GetName is an internal getter (TBD...)
+func (v *DeleteDomainRequest) GetName() (o string) {
+	if v != nil {
+		return v.Name
+	}
+	return
+}
+
 // DeprecateDomainRequest is an internal type (TBD...)
 type DeprecateDomainRequest struct {
 	Name          string `json:"name,omitempty"`
@@ -2177,6 +2191,8 @@ type EntityNotExistsError struct {
 	Message        string `json:"message,required"`
 	CurrentCluster string `json:"currentCluster,omitempty"`
 	ActiveCluster  string `json:"activeCluster,omitempty"`
+	// TODO(active-active): Add ActiveClusters field
+	// ActiveClusters []string `json:"activeClusters,omitempty"`
 }
 
 // WorkflowExecutionAlreadyCompletedError is an internal type (TBD...)

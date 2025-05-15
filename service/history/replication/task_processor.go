@@ -36,6 +36,7 @@ import (
 
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/constants"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -82,8 +83,8 @@ type (
 		metricsClient     metrics.Client
 		logger            log.Logger
 		taskExecutor      TaskExecutor
-		hostRateLimiter   *quotas.DynamicRateLimiter
-		shardRateLimiter  *quotas.DynamicRateLimiter
+		hostRateLimiter   quotas.Limiter
+		shardRateLimiter  quotas.Limiter
 
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy
@@ -114,6 +115,7 @@ func NewTaskProcessor(
 	metricsClient metrics.Client,
 	taskFetcher TaskFetcher,
 	taskExecutor TaskExecutor,
+	clock clock.TimeSource,
 ) TaskProcessor {
 	shardID := shard.GetShardID()
 	sourceCluster := taskFetcher.GetSourceCluster()
@@ -130,7 +132,7 @@ func NewTaskProcessor(
 	noTaskBackoffPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorNoTaskRetryWait(shardID))
 	noTaskBackoffPolicy.SetBackoffCoefficient(1)
 	noTaskBackoffPolicy.SetExpirationInterval(backoff.NoInterval)
-	noTaskRetrier := backoff.NewRetrier(noTaskBackoffPolicy, backoff.SystemClock)
+	noTaskRetrier := backoff.NewRetrier(noTaskBackoffPolicy, clock)
 	return &taskProcessorImpl{
 		currentCluster:         shard.GetClusterMetadata().GetCurrentClusterName(),
 		sourceCluster:          sourceCluster,
@@ -265,7 +267,7 @@ func (p *taskProcessorImpl) cleanupReplicationTaskLoop() {
 func (p *taskProcessorImpl) cleanupAckedReplicationTasks() error {
 	minAckLevel := int64(math.MaxInt64)
 	for clusterName := range p.shard.GetClusterMetadata().GetRemoteClusterInfo() {
-		ackLevel := p.shard.GetClusterReplicationLevel(clusterName)
+		ackLevel := p.shard.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryReplication, clusterName).TaskID
 		if ackLevel < minAckLevel {
 			minAckLevel = ackLevel
 		}
@@ -276,7 +278,7 @@ func (p *taskProcessorImpl) cleanupAckedReplicationTasks() error {
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordTimer(
 		metrics.ReplicationTasksLag,
-		time.Duration(p.shard.GetTransferMaxReadLevel()-minAckLevel),
+		time.Duration(p.shard.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryReplication, p.currentCluster).TaskID-minAckLevel),
 	)
 	for {
 		pageSize := p.config.ReplicatorTaskDeleteBatchSize()
@@ -424,7 +426,7 @@ func (p *taskProcessorImpl) processSingleTask(replicationTask *types.Replication
 		return err
 	case err == execution.ErrMissingVersionHistories:
 		// skip the workflow without version histories
-		p.logger.Warn("Encounter workflow withour version histories")
+		p.logger.Warn("Encounter workflow without version histories")
 		return nil
 	default:
 		// handle error
@@ -436,9 +438,9 @@ func (p *taskProcessorImpl) processSingleTask(replicationTask *types.Replication
 		p.logger.Warn("Skip adding new messages to DLQ.", tag.Error(err))
 		return err
 	default:
-		request, err := p.generateDLQRequest(replicationTask)
-		if err != nil {
-			p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err))
+		request, err2 := p.generateDLQRequest(replicationTask)
+		if err2 != nil {
+			p.logger.Error("Failed to generate DLQ replication task.", tag.Error(err2))
 			// We cannot deserialize the task. Dropping it.
 			return nil
 		}
@@ -604,7 +606,10 @@ func (p *taskProcessorImpl) triggerDataInconsistencyScan(replicationTask *types.
 	if err != nil {
 		return err
 	}
-	client := p.shard.GetService().GetClientBean().GetRemoteFrontendClient(clusterName)
+	client, err := p.shard.GetService().GetClientBean().GetRemoteFrontendClient(clusterName)
+	if err != nil {
+		return err
+	}
 	fixExecution := entity.Execution{
 		DomainID:   domainID,
 		WorkflowID: workflowID,

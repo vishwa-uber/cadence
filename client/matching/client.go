@@ -25,6 +25,7 @@ import (
 
 	"go.uber.org/yarpc"
 
+	"github.com/uber/cadence/common/errors"
 	"github.com/uber/cadence/common/future"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/types"
@@ -130,8 +131,9 @@ func (c *clientImpl) PollForActivityTask(
 	}
 	resp, err := c.client.PollForActivityTask(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
 	if err != nil {
-		return nil, err
+		return nil, errors.NewPeerHostnameError(err, peer)
 	}
+
 	request.PollRequest.TaskList.Name = originalTaskListName
 	c.provider.UpdatePartitionConfig(
 		request.GetDomainUUID(),
@@ -168,7 +170,7 @@ func (c *clientImpl) PollForDecisionTask(
 	}
 	resp, err := c.client.PollForDecisionTask(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
 	if err != nil {
-		return nil, err
+		return nil, errors.NewPeerHostnameError(err, peer)
 	}
 	request.PollRequest.TaskList.Name = originalTaskListName
 	c.provider.UpdatePartitionConfig(
@@ -227,7 +229,11 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	if err != nil {
 		return err
 	}
-	return c.client.RespondQueryTaskCompleted(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	err = c.client.RespondQueryTaskCompleted(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *clientImpl) CancelOutstandingPoll(
@@ -239,7 +245,11 @@ func (c *clientImpl) CancelOutstandingPoll(
 	if err != nil {
 		return err
 	}
-	return c.client.CancelOutstandingPoll(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	err = c.client.CancelOutstandingPoll(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *clientImpl) DescribeTaskList(
@@ -251,7 +261,11 @@ func (c *clientImpl) DescribeTaskList(
 	if err != nil {
 		return nil, err
 	}
-	return c.client.DescribeTaskList(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	resp, err := c.client.DescribeTaskList(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (c *clientImpl) ListTaskListPartitions(
@@ -263,7 +277,11 @@ func (c *clientImpl) ListTaskListPartitions(
 	if err != nil {
 		return nil, err
 	}
-	return c.client.ListTaskListPartitions(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	resp, err := c.client.ListTaskListPartitions(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (c *clientImpl) GetTaskListsByDomain(
@@ -285,10 +303,10 @@ func (c *clientImpl) GetTaskListsByDomain(
 
 	decisionTaskListMap := make(map[string]*types.DescribeTaskListResponse)
 	activityTaskListMap := make(map[string]*types.DescribeTaskListResponse)
-	for _, future := range futures {
+	for i, future := range futures {
 		var resp *types.GetTaskListsByDomainResponse
 		if err = future.Get(ctx, &resp); err != nil {
-			return nil, err
+			return nil, errors.NewPeerHostnameError(err, peers[i])
 		}
 		for name, tl := range resp.GetDecisionTaskListMap() {
 			if _, ok := decisionTaskListMap[name]; !ok {
@@ -321,7 +339,11 @@ func (c *clientImpl) UpdateTaskListPartitionConfig(
 	if err != nil {
 		return nil, err
 	}
-	return c.client.UpdateTaskListPartitionConfig(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	resp, err := c.client.UpdateTaskListPartitionConfig(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (c *clientImpl) RefreshTaskListPartitionConfig(
@@ -333,5 +355,9 @@ func (c *clientImpl) RefreshTaskListPartitionConfig(
 	if err != nil {
 		return nil, err
 	}
-	return c.client.RefreshTaskListPartitionConfig(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	resp, err := c.client.RefreshTaskListPartitionConfig(ctx, request, append(opts, yarpc.WithShardKey(peer))...)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }

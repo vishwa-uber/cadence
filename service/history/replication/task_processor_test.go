@@ -44,6 +44,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/backoff"
 	"github.com/uber/cadence/common/cache"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
 	"github.com/uber/cadence/common/constants"
 	"github.com/uber/cadence/common/dynamicconfig/dynamicproperties"
@@ -76,13 +77,14 @@ type (
 		taskFetcher        *fakeTaskFetcher
 		taskExecutor       *MockTaskExecutor
 		taskProcessor      *taskProcessorImpl
+		clock              clock.MockedTimeSource
 	}
 )
 
 type fakeTaskFetcher struct {
 	sourceCluster string
 	requestChan   chan *request
-	rateLimiter   *quotas.DynamicRateLimiter
+	rateLimiter   quotas.Limiter
 }
 
 func (f fakeTaskFetcher) Start() {}
@@ -93,7 +95,7 @@ func (f fakeTaskFetcher) GetSourceCluster() string {
 func (f fakeTaskFetcher) GetRequestChan() chan<- *request {
 	return f.requestChan
 }
-func (f fakeTaskFetcher) GetRateLimiter() *quotas.DynamicRateLimiter {
+func (f fakeTaskFetcher) GetRateLimiter() quotas.Limiter {
 	return f.rateLimiter
 }
 
@@ -131,6 +133,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockFrontendClient = s.mockShard.Resource.RemoteFrontendClient
 	s.adminClient = s.mockShard.Resource.RemoteAdminClient
 	s.executionManager = s.mockShard.Resource.ExecutionMgr
+	s.clock = clock.NewMockedTimeSource()
 
 	s.mockEngine = engine.NewMockEngine(s.controller)
 	s.config = config.NewForTest()
@@ -153,6 +156,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		metricsClient,
 		s.taskFetcher,
 		s.taskExecutor,
+		s.clock,
 	).(*taskProcessorImpl)
 }
 
@@ -646,6 +650,7 @@ func TestProcessorLoop_TaskExecuteFailed_ShardChangeErr(t *testing.T) {
 		metricsClient,
 		taskFetcher,
 		taskExecutor,
+		clock.NewMockedTimeSource(),
 	).(*taskProcessorImpl)
 
 	// start the process loop
