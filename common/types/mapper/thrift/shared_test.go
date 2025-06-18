@@ -3508,3 +3508,18 @@ func TestQueueStateConversion(t *testing.T) {
 		assert.Equal(t, original, roundTripObj)
 	}
 }
+
+func TestActiveClusterSelectionPolicyConversion(t *testing.T) {
+	testCases := []*types.ActiveClusterSelectionPolicy{
+		nil,
+		&testdata.ActiveClusterSelectionPolicyExternalEntity,
+		&testdata.ActiveClusterSelectionPolicyRegionSticky,
+	}
+
+	for _, original := range testCases {
+		thriftObj := FromActiveClusterSelectionPolicy(original)
+		roundTripObj := ToActiveClusterSelectionPolicy(thriftObj)
+		assert.Equal(t, original, roundTripObj)
+	}
+
+}

@@ -914,6 +914,8 @@ func FromContinueAsNewWorkflowExecutionDecisionAttributes(t *types.ContinueAsNew
 		Memo:                                FromMemo(t.Memo),
 		SearchAttributes:                    FromSearchAttributes(t.SearchAttributes),
 		JitterStartSeconds:                  t.JitterStartSeconds,
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
 	}
 }
 
@@ -939,6 +941,8 @@ func ToContinueAsNewWorkflowExecutionDecisionAttributes(t *shared.ContinueAsNewW
 		Memo:                                ToMemo(t.Memo),
 		SearchAttributes:                    ToSearchAttributes(t.SearchAttributes),
 		JitterStartSeconds:                  t.JitterStartSeconds,
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
 	}
 }
 
@@ -5168,6 +5172,8 @@ func FromSignalWithStartWorkflowExecutionRequest(t *types.SignalWithStartWorkflo
 		SearchAttributes:                    FromSearchAttributes(t.SearchAttributes),
 		Header:                              FromHeader(t.Header),
 		FirstRunAtTimestamp:                 t.FirstRunAtTimestamp,
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5196,6 +5202,8 @@ func ToSignalWithStartWorkflowExecutionRequest(t *shared.SignalWithStartWorkflow
 		SearchAttributes:                    ToSearchAttributes(t.SearchAttributes),
 		Header:                              ToHeader(t.Header),
 		FirstRunAtTimestamp:                 t.FirstRunAtTimestamp,
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5252,6 +5260,8 @@ func FromStartChildWorkflowExecutionDecisionAttributes(t *types.StartChildWorkfl
 		Header:                              FromHeader(t.Header),
 		Memo:                                FromMemo(t.Memo),
 		SearchAttributes:                    FromSearchAttributes(t.SearchAttributes),
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5276,6 +5286,8 @@ func ToStartChildWorkflowExecutionDecisionAttributes(t *shared.StartChildWorkflo
 		Header:                              ToHeader(t.Header),
 		Memo:                                ToMemo(t.Memo),
 		SearchAttributes:                    ToSearchAttributes(t.SearchAttributes),
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5336,6 +5348,8 @@ func FromStartChildWorkflowExecutionInitiatedEventAttributes(t *types.StartChild
 		DelayStartSeconds:                   t.DelayStartSeconds,
 		JitterStartSeconds:                  t.JitterStartSeconds,
 		FirstRunAtTimestamp:                 t.FirstRunAtTimestamp,
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5364,6 +5378,8 @@ func ToStartChildWorkflowExecutionInitiatedEventAttributes(t *shared.StartChildW
 		DelayStartSeconds:                   t.DelayStartSeconds,
 		JitterStartSeconds:                  t.JitterStartSeconds,
 		FirstRunAtTimestamp:                 t.FirstRunAtTimestamp,
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5499,6 +5515,8 @@ func FromStartWorkflowExecutionRequest(t *types.StartWorkflowExecutionRequest) *
 		DelayStartSeconds:                   t.DelayStartSeconds,
 		JitterStartSeconds:                  t.JitterStartSeconds,
 		FirstRunAtTimestamp:                 t.FirstRunAtTimeStamp,
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -5526,6 +5544,8 @@ func ToStartWorkflowExecutionRequest(t *shared.StartWorkflowExecutionRequest) *t
 		DelayStartSeconds:                   t.DelayStartSeconds,
 		JitterStartSeconds:                  t.JitterStartSeconds,
 		FirstRunAtTimeStamp:                 t.FirstRunAtTimestamp,
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -6511,24 +6531,26 @@ func FromWorkflowExecutionInfo(t *types.WorkflowExecutionInfo) *shared.WorkflowE
 		return nil
 	}
 	return &shared.WorkflowExecutionInfo{
-		Execution:        FromWorkflowExecution(t.Execution),
-		Type:             FromWorkflowType(t.Type),
-		StartTime:        t.StartTime,
-		CloseTime:        t.CloseTime,
-		CloseStatus:      FromWorkflowExecutionCloseStatus(t.CloseStatus),
-		HistoryLength:    &t.HistoryLength,
-		ParentDomainId:   t.ParentDomainID,
-		ParentDomainName: t.ParentDomain,
-		ParentInitatedId: t.ParentInitiatedID,
-		ParentExecution:  FromWorkflowExecution(t.ParentExecution),
-		ExecutionTime:    t.ExecutionTime,
-		Memo:             FromMemo(t.Memo),
-		SearchAttributes: FromSearchAttributes(t.SearchAttributes),
-		AutoResetPoints:  FromResetPoints(t.AutoResetPoints),
-		TaskList:         &t.TaskList,
-		IsCron:           &t.IsCron,
-		UpdateTime:       t.UpdateTime,
-		PartitionConfig:  t.PartitionConfig,
+		Execution:                    FromWorkflowExecution(t.Execution),
+		Type:                         FromWorkflowType(t.Type),
+		StartTime:                    t.StartTime,
+		CloseTime:                    t.CloseTime,
+		CloseStatus:                  FromWorkflowExecutionCloseStatus(t.CloseStatus),
+		HistoryLength:                &t.HistoryLength,
+		ParentDomainId:               t.ParentDomainID,
+		ParentDomainName:             t.ParentDomain,
+		ParentInitatedId:             t.ParentInitiatedID,
+		ParentExecution:              FromWorkflowExecution(t.ParentExecution),
+		ExecutionTime:                t.ExecutionTime,
+		Memo:                         FromMemo(t.Memo),
+		SearchAttributes:             FromSearchAttributes(t.SearchAttributes),
+		AutoResetPoints:              FromResetPoints(t.AutoResetPoints),
+		TaskList:                     &t.TaskList,
+		IsCron:                       &t.IsCron,
+		UpdateTime:                   t.UpdateTime,
+		PartitionConfig:              t.PartitionConfig,
+		CronOverlapPolicy:            FromCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy: FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -6538,24 +6560,26 @@ func ToWorkflowExecutionInfo(t *shared.WorkflowExecutionInfo) *types.WorkflowExe
 		return nil
 	}
 	return &types.WorkflowExecutionInfo{
-		Execution:         ToWorkflowExecution(t.Execution),
-		Type:              ToWorkflowType(t.Type),
-		StartTime:         t.StartTime,
-		CloseTime:         t.CloseTime,
-		CloseStatus:       ToWorkflowExecutionCloseStatus(t.CloseStatus),
-		HistoryLength:     t.GetHistoryLength(),
-		ParentDomainID:    t.ParentDomainId,
-		ParentDomain:      t.ParentDomainName,
-		ParentInitiatedID: t.ParentInitatedId,
-		ParentExecution:   ToWorkflowExecution(t.ParentExecution),
-		ExecutionTime:     t.ExecutionTime,
-		Memo:              ToMemo(t.Memo),
-		SearchAttributes:  ToSearchAttributes(t.SearchAttributes),
-		AutoResetPoints:   ToResetPoints(t.AutoResetPoints),
-		TaskList:          t.GetTaskList(),
-		IsCron:            t.GetIsCron(),
-		UpdateTime:        t.UpdateTime,
-		PartitionConfig:   t.PartitionConfig,
+		Execution:                    ToWorkflowExecution(t.Execution),
+		Type:                         ToWorkflowType(t.Type),
+		StartTime:                    t.StartTime,
+		CloseTime:                    t.CloseTime,
+		CloseStatus:                  ToWorkflowExecutionCloseStatus(t.CloseStatus),
+		HistoryLength:                t.GetHistoryLength(),
+		ParentDomainID:               t.ParentDomainId,
+		ParentDomain:                 t.ParentDomainName,
+		ParentInitiatedID:            t.ParentInitatedId,
+		ParentExecution:              ToWorkflowExecution(t.ParentExecution),
+		ExecutionTime:                t.ExecutionTime,
+		Memo:                         ToMemo(t.Memo),
+		SearchAttributes:             ToSearchAttributes(t.SearchAttributes),
+		AutoResetPoints:              ToResetPoints(t.AutoResetPoints),
+		TaskList:                     t.GetTaskList(),
+		IsCron:                       t.GetIsCron(),
+		UpdateTime:                   t.UpdateTime,
+		PartitionConfig:              t.PartitionConfig,
+		CronOverlapPolicy:            ToCronOverlapPolicy(t.CronOverlapPolicy),
+		ActiveClusterSelectionPolicy: ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
 	}
 }
 
@@ -6620,6 +6644,8 @@ func FromWorkflowExecutionStartedEventAttributes(t *types.WorkflowExecutionStart
 		Header:                              FromHeader(t.Header),
 		PartitionConfig:                     t.PartitionConfig,
 		RequestId:                           &t.RequestID,
+		ActiveClusterSelectionPolicy:        FromActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
+		CronOverlapPolicy:                   FromCronOverlapPolicy(t.CronOverlapPolicy),
 	}
 }
 
@@ -6658,7 +6684,59 @@ func ToWorkflowExecutionStartedEventAttributes(t *shared.WorkflowExecutionStarte
 		Header:                              ToHeader(t.Header),
 		PartitionConfig:                     t.PartitionConfig,
 		RequestID:                           t.GetRequestId(),
+		ActiveClusterSelectionPolicy:        ToActiveClusterSelectionPolicy(t.ActiveClusterSelectionPolicy),
+		CronOverlapPolicy:                   ToCronOverlapPolicy(t.CronOverlapPolicy),
 	}
+}
+
+func FromActiveClusterSelectionPolicy(t *types.ActiveClusterSelectionPolicy) *shared.ActiveClusterSelectionPolicy {
+	if t == nil {
+		return nil
+	}
+	return &shared.ActiveClusterSelectionPolicy{
+		Strategy:           FromActiveClusterSelectionStrategy(t.ActiveClusterSelectionStrategy),
+		ExternalEntityType: &t.ExternalEntityType,
+		ExternalEntityKey:  &t.ExternalEntityKey,
+		StickyRegion:       &t.StickyRegion,
+	}
+}
+
+func ToActiveClusterSelectionPolicy(t *shared.ActiveClusterSelectionPolicy) *types.ActiveClusterSelectionPolicy {
+	if t == nil {
+		return nil
+	}
+	return &types.ActiveClusterSelectionPolicy{
+		ActiveClusterSelectionStrategy: ToActiveClusterSelectionStrategy(t.Strategy),
+		ExternalEntityType:             *t.ExternalEntityType,
+		ExternalEntityKey:              *t.ExternalEntityKey,
+		StickyRegion:                   *t.StickyRegion,
+	}
+}
+
+func FromActiveClusterSelectionStrategy(t *types.ActiveClusterSelectionStrategy) *shared.ActiveClusterSelectionStrategy {
+	if t == nil {
+		return nil
+	}
+	switch *t {
+	case types.ActiveClusterSelectionStrategyRegionSticky:
+		return shared.ActiveClusterSelectionStrategyRegionSticky.Ptr()
+	case types.ActiveClusterSelectionStrategyExternalEntity:
+		return shared.ActiveClusterSelectionStrategyExternalEntity.Ptr()
+	}
+	panic("unexpected enum value")
+}
+
+func ToActiveClusterSelectionStrategy(t *shared.ActiveClusterSelectionStrategy) *types.ActiveClusterSelectionStrategy {
+	if t == nil {
+		return nil
+	}
+	switch *t {
+	case shared.ActiveClusterSelectionStrategyRegionSticky:
+		return types.ActiveClusterSelectionStrategyRegionSticky.Ptr()
+	case shared.ActiveClusterSelectionStrategyExternalEntity:
+		return types.ActiveClusterSelectionStrategyExternalEntity.Ptr()
+	}
+	panic("unexpected enum value")
 }
 
 // FromWorkflowExecutionTerminatedEventAttributes converts internal WorkflowExecutionTerminatedEventAttributes type to thrift
@@ -8430,4 +8508,30 @@ func ToQueueState(t *shared.QueueState) *types.QueueState {
 		VirtualQueueStates:    ToVirtualQueueStateMap(t.VirtualQueueStates),
 		ExclusiveMaxReadLevel: ToTaskKey(t.ExclusiveMaxReadLevel),
 	}
+}
+
+func FromCronOverlapPolicy(t *types.CronOverlapPolicy) *shared.CronOverlapPolicy {
+	if t == nil {
+		return nil
+	}
+	switch *t {
+	case types.CronOverlapPolicyBufferOne:
+		return shared.CronOverlapPolicyBufferone.Ptr()
+	case types.CronOverlapPolicySkipped:
+		return shared.CronOverlapPolicySkipped.Ptr()
+	}
+	panic("unexpected enum value")
+}
+
+func ToCronOverlapPolicy(t *shared.CronOverlapPolicy) *types.CronOverlapPolicy {
+	if t == nil {
+		return nil
+	}
+	switch *t {
+	case shared.CronOverlapPolicyBufferone:
+		return types.CronOverlapPolicyBufferOne.Ptr()
+	case shared.CronOverlapPolicySkipped:
+		return types.CronOverlapPolicySkipped.Ptr()
+	}
+	panic("unexpected enum value")
 }

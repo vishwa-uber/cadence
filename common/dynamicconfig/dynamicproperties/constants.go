@@ -1525,6 +1525,7 @@ const (
 	TestGetBoolPropertyFilteredByTaskListInfoKey
 	TestGetBoolPropertyFilteredByDomainKey
 	TestGetBoolPropertyFilteredByDomainIDAndWorkflowIDKey
+	TestGetBoolPropertyFilteredByShardIDKey
 
 	// key for common & admin
 
@@ -1640,12 +1641,6 @@ const (
 	// Default value: true
 	// Allowed filters: N/A
 	EnableQueryAttributeValidation
-	// EnableDomainDeletion is a feature flag to enable deletion of the domains.
-	// This feature flag will be removed after the change is rolled out in all the waves.
-	// KeyName: system.enableDomainDeletion
-	// Value type: bool
-	// Default value: false
-	EnableDomainDeletion
 
 	// key for matching
 
@@ -2101,6 +2096,9 @@ const (
 
 	DisableTransferFailoverQueue
 	DisableTimerFailoverQueue
+
+	EnableTransferQueueV2
+	EnableTimerQueueV2
 
 	// LastBoolKey must be the last one in this const group
 	LastBoolKey
@@ -4030,6 +4028,12 @@ var BoolKeys = map[BoolKey]DynamicBool{
 		DefaultValue: false,
 		Filters:      nil,
 	},
+	TestGetBoolPropertyFilteredByShardIDKey: {
+		KeyName:      "testGetBoolPropertyFilteredByShardIDKey",
+		Description:  "",
+		DefaultValue: false,
+		Filters:      []Filter{ShardID},
+	},
 	EnableVisibilitySampling: {
 		KeyName:      "system.enableVisibilitySampling",
 		Description:  "EnableVisibilitySampling is key for enable visibility sampling for basic(DB based) visibility",
@@ -4131,11 +4135,6 @@ var BoolKeys = map[BoolKey]DynamicBool{
 		KeyName:      "frontend.enableQueryAttributeValidation",
 		Description:  "EnableQueryAttributeValidation enables validation of queries' search attributes against the dynamic config whitelist",
 		DefaultValue: true,
-	},
-	EnableDomainDeletion: {
-		KeyName:      "frontend.enableDomainDeletion",
-		Description:  "EnableDomainDeletion enables Delete Domain API to remove domain records from the persistence layer.",
-		DefaultValue: false,
 	},
 	MatchingEnableSyncMatch: {
 		KeyName:      "matching.enableSyncMatch",
@@ -4572,6 +4571,18 @@ var BoolKeys = map[BoolKey]DynamicBool{
 	DisableTimerFailoverQueue: {
 		KeyName:      "history.disableTimerFailoverQueue",
 		Description:  "DisableTimerFailoverQueue is to disable timer failover queue",
+		DefaultValue: false,
+	},
+	EnableTransferQueueV2: {
+		KeyName:      "history.enableTransferQueueV2",
+		Description:  "EnableTransferQueueV2 is to enable transfer queue v2",
+		Filters:      []Filter{ShardID},
+		DefaultValue: false,
+	},
+	EnableTimerQueueV2: {
+		KeyName:      "history.enableTimerQueueV2",
+		Description:  "EnableTimerQueueV2 is to enable timer queue v2",
+		Filters:      []Filter{ShardID},
 		DefaultValue: false,
 	},
 }

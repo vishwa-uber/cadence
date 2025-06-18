@@ -42,6 +42,7 @@ func (db *cdb) InsertWorkflowExecutionWithTasks(
 	currentWorkflowRequest *nosqlplugin.CurrentWorkflowWriteRequest,
 	execution *nosqlplugin.WorkflowExecutionRequest,
 	tasksByCategory map[persistence.HistoryTaskCategory][]*nosqlplugin.HistoryMigrationTask,
+	activeClusterSelectionPolicyRow *nosqlplugin.ActiveClusterSelectionPolicyRow,
 	shardCondition *nosqlplugin.ShardCondition,
 ) error {
 	shardID := shardCondition.ShardID
@@ -51,7 +52,11 @@ func (db *cdb) InsertWorkflowExecutionWithTasks(
 
 	batch := db.session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
-	err := insertOrUpsertWorkflowRequestRow(batch, requests, timeStamp)
+	err := insertWorkflowActiveClusterSelectionPolicyRow(batch, activeClusterSelectionPolicyRow, timeStamp)
+	if err != nil {
+		return err
+	}
+	err = insertOrUpsertWorkflowRequestRow(batch, requests, timeStamp)
 	if err != nil {
 		return err
 	}

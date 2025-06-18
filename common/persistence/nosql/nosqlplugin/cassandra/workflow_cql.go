@@ -82,7 +82,9 @@ const (
 		`expiration_seconds: ?, ` +
 		`search_attributes: ?, ` +
 		`memo: ?, ` +
-		`partition_config: ? ` +
+		`partition_config: ?, ` +
+		`active_cluster_selection_policy: ?, ` +
+		`active_cluster_selection_policy_encoding: ?` +
 		`}`
 
 	templateTransferTaskType = `{` +
@@ -245,6 +247,10 @@ const (
 	templateUpsertWorkflowRequestQuery = `INSERT INTO executions (` +
 		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, current_run_id, last_updated_time) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) USING TTL ?`
+
+	templateInsertWorkflowActiveClusterSelectionPolicyRowQuery = `INSERT INTO executions (` +
+		`shard_id, type, domain_id, workflow_id, run_id, visibility_ts, task_id, created_time, data, data_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateGetLatestWorkflowRequestQuery = `SELECT current_run_id ` +
 		`FROM executions ` +

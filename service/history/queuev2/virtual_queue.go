@@ -20,6 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+//go:generate mockgen -package $GOPACKAGE -destination virtual_queue_mock.go github.com/uber/cadence/service/history/queuev2 VirtualQueue
 package queuev2
 
 import (
@@ -29,6 +30,7 @@ import (
 	"sync/atomic"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/dynamicconfig/dynamicproperties"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
@@ -54,6 +56,7 @@ type (
 		redispatcher task.Redispatcher
 		logger       log.Logger
 		metricsScope metrics.Scope
+		timeSource   clock.TimeSource
 
 		sync.RWMutex
 		status        int32
@@ -71,6 +74,7 @@ func NewVirtualQueue(
 	redispatcher task.Redispatcher,
 	logger log.Logger,
 	metricsScope metrics.Scope,
+	timeSource clock.TimeSource,
 	virtualSlices []VirtualSlice,
 	options *VirtualQueueOptions,
 ) VirtualQueue {
@@ -87,6 +91,7 @@ func NewVirtualQueue(
 		redispatcher: redispatcher,
 		logger:       logger,
 		metricsScope: metricsScope,
+		timeSource:   timeSource,
 
 		status:        common.DaemonStatusInitialized,
 		ctx:           ctx,
@@ -221,7 +226,14 @@ func (q *virtualQueueImpl) loadAndSubmitTasks() {
 		return
 	}
 
+	now := q.timeSource.Now()
 	for _, task := range tasks {
+		scheduledTime := task.GetTaskKey().GetScheduledTime()
+		if now.Before(scheduledTime) {
+			q.redispatcher.RedispatchTask(task, scheduledTime)
+			continue
+		}
+
 		submitted, err := q.processor.TrySubmit(task)
 		if err != nil {
 			select {

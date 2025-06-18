@@ -23,6 +23,7 @@
 package execution
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -78,6 +79,7 @@ func (e *mutableStateBuilder) addWorkflowExecutionStartedEventForContinueAsNew(
 		Memo:                                attributes.Memo,
 		SearchAttributes:                    attributes.SearchAttributes,
 		JitterStartSeconds:                  attributes.JitterStartSeconds,
+		ActiveClusterSelectionPolicy:        attributes.ActiveClusterSelectionPolicy,
 	}
 
 	req := &types.HistoryStartWorkflowExecutionRequest{
@@ -192,6 +194,13 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		requestID = event.GetRequestID()
 	}
 	e.executionInfo.CreateRequestID = requestID
+
+	activeClusterSelectionPolicy, err := e.getActiveClusterSelectionPolicy(event)
+	if err != nil {
+		return err
+	}
+	e.executionInfo.ActiveClusterSelectionPolicy = activeClusterSelectionPolicy
+
 	e.insertWorkflowRequest(persistence.WorkflowRequest{
 		RequestID:   requestID,
 		Version:     startEvent.Version,
@@ -283,4 +292,29 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		}
 	}
 	return nil
+}
+
+func (e *mutableStateBuilder) getActiveClusterSelectionPolicy(attr *types.WorkflowExecutionStartedEventAttributes) (*types.ActiveClusterSelectionPolicy, error) {
+	if !e.domainEntry.GetReplicationConfig().IsActiveActive() {
+		return nil, nil
+	}
+
+	if attr.ActiveClusterSelectionPolicy == nil {
+		return nil, nil
+	}
+
+	policy := attr.ActiveClusterSelectionPolicy
+	if policy.GetStrategy() == types.ActiveClusterSelectionStrategyExternalEntity {
+		if !e.shard.GetActiveClusterManager().SupportedExternalEntityType(policy.ExternalEntityType) {
+			return nil, fmt.Errorf("external entity type %s is not supported", policy.ExternalEntityType)
+		}
+		return policy, nil
+	}
+
+	// default to region sticky policy if it is not external entity policy
+	// always replace the user provided region with the current region
+	return &types.ActiveClusterSelectionPolicy{
+		ActiveClusterSelectionStrategy: types.ActiveClusterSelectionStrategyRegionSticky.Ptr(),
+		StickyRegion:                   e.shard.GetActiveClusterManager().CurrentRegion(),
+	}, nil
 }
