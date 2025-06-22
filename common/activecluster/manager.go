@@ -33,7 +33,6 @@ import (
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/cluster"
-	"github.com/uber/cadence/common/constants"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/log/tag"
 	"github.com/uber/cadence/common/metrics"
@@ -195,27 +194,34 @@ func (m *managerImpl) FailoverVersionOfNewWorkflow(ctx context.Context, req *typ
 		return 0, errors.New("start request is nil")
 	}
 
-	entityType, entityKey, ok := m.getExternalEntitySourceAndKeyFromHeaders(req.StartRequest.Header)
-
-	// If external entity headers are provided, return failover version of the external entity
-	if ok {
-		externalEntity, err := m.getExternalEntity(ctx, entityType, entityKey)
-		if err != nil {
-			return 0, err
+	plcy := req.StartRequest.ActiveClusterSelectionPolicy
+	// region sticky policy
+	if plcy == nil || plcy.GetStrategy() == types.ActiveClusterSelectionStrategyRegionSticky {
+		// use current region for nil policy, otherwise use sticky region from policy
+		region := m.clusterMetadata.GetCurrentRegion()
+		if plcy != nil {
+			region = plcy.StickyRegion
 		}
 
-		return externalEntity.FailoverVersion, nil
+		cluster, ok := d.GetReplicationConfig().ActiveClusters.ActiveClustersByRegion[region]
+		if !ok {
+			return 0, newRegionNotFoundForDomainError(region, req.DomainUUID)
+		}
+
+		return cluster.FailoverVersion, nil
 	}
 
-	// If external entity headers are not provided, consider it as region sticky workflow.
-	// Return failover version of the active cluster in current region.
-	region := m.clusterMetadata.GetCurrentRegion()
-	cluster, ok := d.GetReplicationConfig().ActiveClusters.ActiveClustersByRegion[region]
-	if !ok {
-		return 0, newRegionNotFoundForDomainError(region, req.DomainUUID)
+	if plcy.GetStrategy() != types.ActiveClusterSelectionStrategyExternalEntity {
+		return 0, fmt.Errorf("unsupported active cluster selection strategy: %s", plcy.GetStrategy())
 	}
 
-	return cluster.FailoverVersion, nil
+	// Return failover version of the external entity
+	externalEntity, err := m.getExternalEntity(ctx, plcy.ExternalEntityType, plcy.ExternalEntityKey)
+	if err != nil {
+		return 0, err
+	}
+
+	return externalEntity.FailoverVersion, nil
 }
 
 func (m *managerImpl) LookupWorkflow(ctx context.Context, domainID, wfID, rID string) (*LookupResult, error) {
@@ -354,24 +360,6 @@ func (m *managerImpl) getExternalEntity(ctx context.Context, entityType, entityK
 	}
 
 	return provider.GetExternalEntity(ctx, entityKey)
-}
-
-func (m *managerImpl) getExternalEntitySourceAndKeyFromHeaders(header *types.Header) (string, string, bool) {
-	if header == nil || len(header.Fields) == 0 {
-		return "", "", false
-	}
-
-	entityType, ok := header.Fields[constants.ActiveActiveEntityTypeHeaderKey]
-	if !ok {
-		return "", "", false
-	}
-
-	entityKey, ok := header.Fields[constants.ActiveActiveEntityKeyHeaderKey]
-	if !ok {
-		return "", "", false
-	}
-
-	return string(entityType), string(entityKey), true
 }
 
 func (m *managerImpl) getWorkflowActivenessMetadata(ctx context.Context, domainID, wfID, rID string) (*types.ActiveClusterSelectionPolicy, error) {

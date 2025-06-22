@@ -835,7 +835,6 @@ func (e *historyEngineImpl) createMutableState(
 		return nil, err
 	}
 
-	// TODO(active-active): Write unit tests to cover this
 	if domainEntry.GetReplicationConfig().IsActiveActive() {
 		v, err := e.shard.GetActiveClusterManager().FailoverVersionOfNewWorkflow(ctx, startRequest)
 		if err != nil {

@@ -27,10 +27,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/uber/cadence/common"
+	"github.com/uber/cadence/common/activecluster"
 	"github.com/uber/cadence/common/cache"
 	"github.com/uber/cadence/common/persistence"
 	"github.com/uber/cadence/common/types"
@@ -404,4 +406,115 @@ func TestSignalWithStartWorkflowExecution(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateMutableState(t *testing.T) {
+	tests := []struct {
+		name        string
+		domainEntry *cache.DomainCacheEntry
+		mockFn      func(ac *activecluster.MockManager)
+		wantErr     bool
+		wantVersion int64
+	}{
+		{
+			name:        "create mutable state successfully, active-passive domain's failover version is used as version",
+			domainEntry: getDomainCacheEntry(35, nil),
+			wantVersion: 35,
+		},
+		{
+			name: "create mutable state successfully, active-active domain. failover version is looked up from active cluster manager",
+			domainEntry: getDomainCacheEntry(
+				-1, /* doesn't matter for active-active domain */
+				&types.ActiveClusters{
+					ActiveClustersByRegion: map[string]types.ActiveClusterInfo{
+						"us-west": {
+							ActiveClusterName: "cluster1",
+							FailoverVersion:   0,
+						},
+						"us-east": {
+							ActiveClusterName: "cluster2",
+							FailoverVersion:   2,
+						},
+					},
+				}),
+			mockFn: func(ac *activecluster.MockManager) {
+				ac.EXPECT().FailoverVersionOfNewWorkflow(gomock.Any(), gomock.Any()).
+					Return(int64(125), nil)
+			},
+			wantVersion: 125,
+		},
+		{
+			name: "failed to create mutable state for active-active domain. FailoverVersionOfNewWorkflow failed",
+			domainEntry: getDomainCacheEntry(
+				-1, /* doesn't matter for active-active domain */
+				&types.ActiveClusters{
+					ActiveClustersByRegion: map[string]types.ActiveClusterInfo{
+						"us-west": {
+							ActiveClusterName: "cluster1",
+							FailoverVersion:   0,
+						},
+						"us-east": {
+							ActiveClusterName: "cluster2",
+							FailoverVersion:   2,
+						},
+					},
+				}),
+			mockFn: func(ac *activecluster.MockManager) {
+				ac.EXPECT().FailoverVersionOfNewWorkflow(gomock.Any(), gomock.Any()).
+					Return(int64(125), errors.New("some error"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			eft := testdata.NewEngineForTest(t, NewEngineWithShardContext)
+			eft.Engine.Start()
+			defer eft.Engine.Stop()
+			engine := eft.Engine.(*historyEngineImpl)
+
+			if tc.mockFn != nil {
+				tc.mockFn(eft.ShardCtx.Resource.ActiveClusterMgr)
+			}
+
+			mutableState, err := engine.createMutableState(
+				context.Background(),
+				tc.domainEntry,
+				"rid",
+				&types.HistoryStartWorkflowExecutionRequest{},
+			)
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, mutableState)
+			}
+
+			if err != nil {
+				return
+			}
+
+			gotVer := mutableState.GetCurrentVersion()
+			assert.Equal(t, tc.wantVersion, gotVer)
+		})
+	}
+}
+
+func getDomainCacheEntry(domainFailoverVersion int64, cfg *types.ActiveClusters) *cache.DomainCacheEntry {
+	// only thing we care in domain cache entry is the active clusters config
+	return cache.NewDomainCacheEntryForTest(
+		nil,
+		nil,
+		true,
+		&persistence.DomainReplicationConfig{
+			ActiveClusters:    cfg,
+			ActiveClusterName: "cluster0",
+		},
+		domainFailoverVersion,
+		nil,
+		1,
+		1,
+		1,
+	)
 }

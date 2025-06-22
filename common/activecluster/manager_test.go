@@ -439,15 +439,14 @@ func TestFailoverVersionOfNewWorkflow(t *testing.T) {
 			expectedError: "start request is nil",
 		},
 		{
-			name: "active-active domain, start request has external entity headers but corresponding provider is missing",
+			name: "active-active domain, policy has external entity but corresponding provider is missing",
 			req: &types.HistoryStartWorkflowExecutionRequest{
 				DomainUUID: "test-domain-id",
 				StartRequest: &types.StartWorkflowExecutionRequest{
-					Header: &types.Header{
-						Fields: map[string][]byte{
-							"active-active-entity-type": []byte("city"),
-							"active-active-entity-key":  []byte("seattle"),
-						},
+					ActiveClusterSelectionPolicy: &types.ActiveClusterSelectionPolicy{
+						ActiveClusterSelectionStrategy: types.ActiveClusterSelectionStrategyExternalEntity.Ptr(),
+						ExternalEntityType:             "city",
+						ExternalEntityKey:              "seattle",
 					},
 				},
 			},
@@ -462,15 +461,14 @@ func TestFailoverVersionOfNewWorkflow(t *testing.T) {
 			expectedError: "external entity provider for type \"city\" not found",
 		},
 		{
-			name: "active-active domain, start request has external entity headers. successfully get failover version from external entity",
+			name: "active-active domain, policy has external entity. successfully get failover version from external entity",
 			req: &types.HistoryStartWorkflowExecutionRequest{
 				DomainUUID: "test-domain-id",
 				StartRequest: &types.StartWorkflowExecutionRequest{
-					Header: &types.Header{
-						Fields: map[string][]byte{
-							"active-active-entity-type": []byte("city"),
-							"active-active-entity-key":  []byte("seattle"),
-						},
+					ActiveClusterSelectionPolicy: &types.ActiveClusterSelectionPolicy{
+						ActiveClusterSelectionStrategy: types.ActiveClusterSelectionStrategyExternalEntity.Ptr(),
+						ExternalEntityType:             "city",
+						ExternalEntityKey:              "seattle",
 					},
 				},
 			},
@@ -493,12 +491,11 @@ func TestFailoverVersionOfNewWorkflow(t *testing.T) {
 			expectedFailoverVersion: 7,
 		},
 		{
-			name: "active-active domain, external entity headers missing. returns failover version of the active cluster in current region",
+			name: "active-active domain, policy is nil. returns failover version of the active cluster in current region",
 			req: &types.HistoryStartWorkflowExecutionRequest{
 				DomainUUID: "test-domain-id",
 				StartRequest: &types.StartWorkflowExecutionRequest{
-					// empty header
-					Header: &types.Header{},
+					ActiveClusterSelectionPolicy: nil,
 				},
 			},
 			activeClusterCfg: &types.ActiveClusters{
@@ -516,12 +513,14 @@ func TestFailoverVersionOfNewWorkflow(t *testing.T) {
 			expectedFailoverVersion: 20, // failover version of cluster0 in RegionToClusterMap
 		},
 		{
-			name: "active-active domain, external entity headers missing. couldn't find cluster in current region",
+			name: "active-active domain, policy is region sticky but region is missing in domain's active cluster config",
 			req: &types.HistoryStartWorkflowExecutionRequest{
 				DomainUUID: "test-domain-id",
 				StartRequest: &types.StartWorkflowExecutionRequest{
-					// empty header
-					Header: &types.Header{},
+					ActiveClusterSelectionPolicy: &types.ActiveClusterSelectionPolicy{
+						ActiveClusterSelectionStrategy: types.ActiveClusterSelectionStrategyRegionSticky.Ptr(),
+						StickyRegion:                   "us-west",
+					},
 				},
 			},
 			activeClusterCfg: &types.ActiveClusters{
@@ -534,6 +533,31 @@ func TestFailoverVersionOfNewWorkflow(t *testing.T) {
 				},
 			},
 			expectedError: "could not find region us-west in the domain test-domain-id's active cluster config",
+		},
+		{
+			name: "active-active domain, policy is region sticky. returns failover version of the active cluster in sticky region",
+			req: &types.HistoryStartWorkflowExecutionRequest{
+				DomainUUID: "test-domain-id",
+				StartRequest: &types.StartWorkflowExecutionRequest{
+					ActiveClusterSelectionPolicy: &types.ActiveClusterSelectionPolicy{
+						ActiveClusterSelectionStrategy: types.ActiveClusterSelectionStrategyRegionSticky.Ptr(),
+						StickyRegion:                   "us-west",
+					},
+				},
+			},
+			activeClusterCfg: &types.ActiveClusters{
+				ActiveClustersByRegion: map[string]types.ActiveClusterInfo{
+					"us-west": {
+						ActiveClusterName: "cluster0",
+						FailoverVersion:   20,
+					},
+					"us-east": {
+						ActiveClusterName: "cluster1",
+						FailoverVersion:   22,
+					},
+				},
+			},
+			expectedFailoverVersion: 20, // failover version of cluster0 in RegionToClusterMap
 		},
 	}
 
