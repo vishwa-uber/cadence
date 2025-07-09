@@ -1804,6 +1804,7 @@ type DescribeTaskListResponse struct {
 	Pollers         []*PollerInfo            `json:"pollers,omitempty"`
 	TaskListStatus  *TaskListStatus          `json:"taskListStatus,omitempty"`
 	PartitionConfig *TaskListPartitionConfig `json:"partitionConfig,omitempty"`
+	TaskList        *TaskList                `json:"taskList,omitempty"`
 }
 
 // GetPollers is an internal getter (TBD...)
@@ -2736,7 +2737,7 @@ func (v *GetWorkflowExecutionHistoryRequest) GetDomain() (o string) {
 }
 
 // GetExecution is an internal getter (TBD...)
-func (v *GetWorkflowExecutionHistoryRequest) GetExecution() (o *WorkflowExecution) {
+func (v *GetWorkflowExecutionHistoryRequest) GetWorkflowExecution() (o *WorkflowExecution) {
 	if v != nil && v.Execution != nil {
 		return v.Execution
 	}
@@ -6927,6 +6928,8 @@ func (e TaskListKind) String() string {
 		return "NORMAL"
 	case 1:
 		return "STICKY"
+	case 2:
+		return "EPHEMERAL"
 	}
 	return fmt.Sprintf("TaskListKind(%d)", w)
 }
@@ -6939,6 +6942,9 @@ func (e *TaskListKind) UnmarshalText(value []byte) error {
 		return nil
 	case "STICKY":
 		*e = TaskListKindSticky
+		return nil
+	case "EPHEMERAL":
+		*e = TaskListKindEphemeral
 		return nil
 	default:
 		val, err := strconv.ParseInt(s, 10, 32)
@@ -6960,6 +6966,8 @@ const (
 	TaskListKindNormal TaskListKind = iota
 	// TaskListKindSticky is an option for TaskListKind
 	TaskListKindSticky
+	// TaskListKindEphemeral is an option for TaskListKind
+	TaskListKindEphemeral
 )
 
 // TaskListMetadata is an internal type (TBD...)
@@ -7003,6 +7011,7 @@ type TaskListStatus struct {
 	TaskIDBlock           *TaskIDBlock                      `json:"taskIDBlock,omitempty"`
 	IsolationGroupMetrics map[string]*IsolationGroupMetrics `json:"isolationGroupMetrics,omitempty"`
 	NewTasksPerSecond     float64                           `json:"newTasksPerSecond,omitempty"`
+	Empty                 bool                              `json:"empty,omitempty"`
 }
 
 // GetBacklogCountHint is an internal getter (TBD...)

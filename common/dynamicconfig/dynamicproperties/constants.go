@@ -1673,6 +1673,7 @@ const (
 
 	MatchingEnableGetNumberOfPartitionsFromCache
 	MatchingEnableAdaptiveScaler
+	MatchingEnablePartitionEmptyCheck
 
 	// key for history
 
@@ -2411,6 +2412,12 @@ const (
 	// Default value: 0
 	// Allowed filters: N/A
 	FrontendShutdownDrainDuration
+	// FrontendWarmupDuration is the duration before a frontend host reports its status as healthy
+	// KeyName: frontend.warmupDuration
+	// Value type: Duration
+	// Default value: 30s
+	// Allowed filters: N/A
+	FrontendWarmupDuration
 	// FrontendFailoverCoolDown is duration between two domain failvoers
 	// KeyName: frontend.failoverCoolDown
 	// Value type: Duration
@@ -4177,6 +4184,12 @@ var BoolKeys = map[BoolKey]DynamicBool{
 		Description:  "MatchingEnableAdaptiveScaler is to enable adaptive task list scaling",
 		DefaultValue: false,
 	},
+	MatchingEnablePartitionEmptyCheck: {
+		KeyName:      "matching.enablePartitionEmptyCheck",
+		Filters:      []Filter{DomainName, TaskListName, TaskType},
+		Description:  "MatchingEnablePartitionEmptyCheck enables using TaskListStatus.empty to check if a partition is empty",
+		DefaultValue: false,
+	},
 	EventsCacheGlobalEnable: {
 		KeyName:      "history.eventsCacheGlobalEnable",
 		Description:  "EventsCacheGlobalEnable is enables global cache over all history shards",
@@ -4870,6 +4883,11 @@ var DurationKeys = map[DurationKey]DynamicDuration{
 		KeyName:      "frontend.shutdownDrainDuration",
 		Description:  "FrontendShutdownDrainDuration is the duration of traffic drain during shutdown",
 		DefaultValue: 0,
+	},
+	FrontendWarmupDuration: {
+		KeyName:      "frontend.warmupDuration",
+		Description:  "FrontendWarmupDuration is the duration before a frontend host reports its status as healthy",
+		DefaultValue: 30 * time.Second,
 	},
 	FrontendFailoverCoolDown: {
 		KeyName:      "frontend.failoverCoolDown",

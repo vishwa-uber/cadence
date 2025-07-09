@@ -1233,6 +1233,7 @@ func FromDescribeTaskListResponse(t *types.DescribeTaskListResponse) *apiv1.Desc
 		Pollers:         FromPollerInfoArray(t.Pollers),
 		TaskListStatus:  FromTaskListStatus(t.TaskListStatus),
 		PartitionConfig: FromAPITaskListPartitionConfig(t.PartitionConfig),
+		TaskList:        FromTaskList(t.TaskList),
 	}
 }
 
@@ -1244,6 +1245,7 @@ func ToDescribeTaskListResponse(t *apiv1.DescribeTaskListResponse) *types.Descri
 		Pollers:         ToPollerInfoArray(t.Pollers),
 		TaskListStatus:  ToTaskListStatus(t.TaskListStatus),
 		PartitionConfig: ToAPITaskListPartitionConfig(t.PartitionConfig),
+		TaskList:        ToTaskList(t.TaskList),
 	}
 }
 
@@ -3996,6 +3998,8 @@ func FromTaskListKind(t *types.TaskListKind) apiv1.TaskListKind {
 		return apiv1.TaskListKind_TASK_LIST_KIND_NORMAL
 	case types.TaskListKindSticky:
 		return apiv1.TaskListKind_TASK_LIST_KIND_STICKY
+	case types.TaskListKindEphemeral:
+		return apiv1.TaskListKind_TASK_LIST_KIND_EPHEMERAL
 	}
 	panic("unexpected enum value")
 }
@@ -4008,6 +4012,8 @@ func ToTaskListKind(t apiv1.TaskListKind) *types.TaskListKind {
 		return types.TaskListKindNormal.Ptr()
 	case apiv1.TaskListKind_TASK_LIST_KIND_STICKY:
 		return types.TaskListKindSticky.Ptr()
+	case apiv1.TaskListKind_TASK_LIST_KIND_EPHEMERAL:
+		return types.TaskListKindEphemeral.Ptr()
 	}
 	panic("unexpected enum value")
 }
@@ -4062,6 +4068,7 @@ func FromTaskListStatus(t *types.TaskListStatus) *apiv1.TaskListStatus {
 		TaskIdBlock:           FromTaskIDBlock(t.TaskIDBlock),
 		IsolationGroupMetrics: FromIsolationGroupMetricsMap(t.IsolationGroupMetrics),
 		NewTasksPerSecond:     t.NewTasksPerSecond,
+		Empty:                 t.Empty,
 	}
 }
 
@@ -4077,6 +4084,7 @@ func ToTaskListStatus(t *apiv1.TaskListStatus) *types.TaskListStatus {
 		TaskIDBlock:           ToTaskIDBlock(t.TaskIdBlock),
 		IsolationGroupMetrics: ToIsolationGroupMetricsMap(t.IsolationGroupMetrics),
 		NewTasksPerSecond:     t.NewTasksPerSecond,
+		Empty:                 t.Empty,
 	}
 }
 
