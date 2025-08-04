@@ -21,6 +21,7 @@
 package metrics
 
 import (
+	"math"
 	"time"
 
 	"github.com/uber-go/tally"
@@ -875,6 +876,9 @@ const (
 
 	// LoadBalancerScope is the metrics scope for Round Robin load balancer
 	LoadBalancerScope
+
+	// ActiveClusterManager is the scope used by active cluster manager
+	ActiveClusterManager
 
 	NumCommonScopes
 )
@@ -1831,6 +1835,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ShardDistributorExecutorClientHeartbeatScope: {operation: "ShardDistributorExecutorHeartbeat"},
 
 		LoadBalancerScope: {operation: "RRLoadBalancer"},
+
+		ActiveClusterManager: {operation: "ActiveClusterManager"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -2381,6 +2387,12 @@ const (
 	BaseCacheCountLimitGauge
 	BaseCacheFullCounter
 	BaseCacheEvictCounter
+
+	// active cluster manager metrics
+	ActiveClusterManagerLookupRequestCount
+	ActiveClusterManagerLookupSuccessCount
+	ActiveClusterManagerLookupFailureCount
+	ActiveClusterManagerLookupLatency
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -3153,6 +3165,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		BaseCacheCountLimitGauge:    {metricName: "cache_count_limit", metricType: Gauge},
 		BaseCacheFullCounter:        {metricName: "cache_full", metricType: Counter},
 		BaseCacheEvictCounter:       {metricName: "cache_evict", metricType: Counter},
+
+		ActiveClusterManagerLookupRequestCount: {metricName: "active_cluster_manager_lookup_request_count", metricType: Counter},
+		ActiveClusterManagerLookupSuccessCount: {metricName: "active_cluster_manager_lookup_success_count", metricType: Counter},
+		ActiveClusterManagerLookupFailureCount: {metricName: "active_cluster_manager_lookup_failure_count", metricType: Counter},
+		ActiveClusterManagerLookupLatency:      {metricName: "active_cluster_manager_lookup_latency", metricType: Histogram, buckets: ExponentialDurationBuckets},
 	},
 	History: {
 		TaskRequests:             {metricName: "task_requests", metricType: Counter},
@@ -3803,6 +3820,18 @@ var ResponsePayloadSizeBuckets = append(
 	tally.ValueBuckets{0},                                 // need an explicit 0 or zero is reported as 1
 	tally.MustMakeExponentialValueBuckets(1024, 2, 20)..., // 1kB..1GB
 )
+
+// ExponentialDurationBuckets is a set of exponential duration buckets
+var ExponentialDurationBuckets = func() tally.DurationBuckets {
+	// generate 79 buckets, starting from 1ms, with a factor of 2^0.25
+	buckets, err := tally.ExponentialDurationBuckets(1*time.Millisecond, math.Pow(2, 0.25), 79)
+	if err != nil {
+		panic(err)
+	}
+	// add a 0 bucket to the beginning
+	buckets = append([]time.Duration{0}, buckets...)
+	return buckets
+}()
 
 // ErrorClass is an enum to help with classifying SLA vs. non-SLA errors (SLA = "service level agreement")
 type ErrorClass uint8
