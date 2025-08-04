@@ -68,7 +68,7 @@ func (e *executorImpl[SP]) Start(ctx context.Context) {
 	e.processLoopWG.Add(1)
 	go func() {
 		defer e.processLoopWG.Done()
-		e.heartbeatloop(ctx)
+		e.heartbeatloop(context.WithoutCancel(ctx))
 	}()
 }
 
