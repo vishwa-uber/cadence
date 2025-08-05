@@ -68,6 +68,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
 	for _, ns := range m.cfg.Namespaces {
+		m.logger.Info("Starting namespace handler", tag.ShardNamespace(ns.Name))
 		if err := m.handleNamespace(ns); err != nil {
 			return err
 		}

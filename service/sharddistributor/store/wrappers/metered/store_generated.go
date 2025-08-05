@@ -26,6 +26,9 @@ func NewStore(
 	logger log.Logger,
 	timeSource clock.TimeSource,
 ) store.Store {
+	if wrapped == nil {
+		return nil
+	}
 	return &meteredStore{
 		wrapped: wrapped,
 		base: base{

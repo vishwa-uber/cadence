@@ -23,6 +23,9 @@ func New{{.Interface.Name}}(
 	logger       log.Logger,
     timeSource   clock.TimeSource,
 ) store.{{.Interface.Name}} {
+    if wrapped == nil {
+        return nil
+    }
     return &{{$decorator}}{
         wrapped: wrapped,
         base:    base{
