@@ -2882,6 +2882,7 @@ const (
 	ShardDistributorLatency
 	ShardDistributorErrContextTimeoutCounter
 	ShardDistributorErrNamespaceNotFound
+	ShardDistributorErrShardNotFound
 
 	ShardDistributorAssignLoopNumRebalancedShards
 	ShardDistributorAssignLoopShardRebalanceLatency
@@ -3644,6 +3645,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardDistributorFailures:                        {metricName: "shard_distributor_failures", metricType: Counter},
 		ShardDistributorLatency:                         {metricName: "shard_distributor_latency", metricType: Timer},
 		ShardDistributorErrNamespaceNotFound:            {metricName: "shard_distributor_err_namespace_not_found", metricType: Counter},
+		ShardDistributorErrShardNotFound:                {metricName: "shard_distributor_err_shard_not_found", metricType: Counter},
 		ShardDistributorAssignLoopShardRebalanceLatency: {metricName: "shard_distrubutor_shard_assign_latency", metricType: Histogram},
 		ShardDistributorAssignLoopNumRebalancedShards:   {metricName: "shard_distributor_shard_assign_reassigned_shards", metricType: Gauge},
 		ShardDistributorAssignLoopAttempts:              {metricName: "shard_distrubutor_shard_assign_attempt", metricType: Counter},
