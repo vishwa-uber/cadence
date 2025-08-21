@@ -68,3 +68,5 @@ system.writeVisibilityStoreName:
   - value: "db"
 system.readVisibilityStoreName:
   - value: "db"
+matching.enableClientAutoConfig:
+- value: true
