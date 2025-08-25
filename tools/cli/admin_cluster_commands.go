@@ -82,7 +82,7 @@ func AdminAddSearchAttribute(c *cli.Context) error {
 	if err != nil {
 		return commoncli.Problem("Add search attribute failed.", err)
 	}
-	fmt.Println("Success. Note that for a multil-node Cadence cluster, DynamicConfig MUST be updated separately to whitelist the new attributes.")
+	fmt.Println("Success. Note that for a multi-node Cadence cluster, DynamicConfig MUST be updated separately to whitelist the new attributes.")
 	return nil
 }
 
