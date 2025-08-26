@@ -427,6 +427,19 @@ func (tr *taskReader) dispatchSingleTaskFromBufferWithRetries(taskInfo *persiste
 }
 
 func (tr *taskReader) dispatchSingleTaskFromBuffer(taskInfo *persistence.TaskInfo) (breakDispatchLoop bool, breakRetries bool) {
+	e := event.E{
+		TaskListName: tr.taskListID.GetName(),
+		TaskListType: tr.taskListID.GetType(),
+		TaskListKind: &tr.tlMgr.taskListKind,
+		TaskInfo:     *taskInfo,
+	}
+	if tr.isTaskExpired(taskInfo) {
+		e.EventName = "Task Expired"
+		event.Log(e)
+		tr.scope.IncCounter(metrics.ExpiredTasksPerTaskListCounter)
+		tr.taskAckManager.AckItem(taskInfo.TaskID)
+		return false, true
+	}
 	isolationGroup, isolationDuration := tr.getIsolationGroupForTask(tr.cancelCtx, taskInfo)
 	_, isolationGroupIsKnown := tr.taskBuffers[isolationGroup]
 	if !isolationGroupIsKnown {
@@ -439,13 +452,6 @@ func (tr *taskReader) dispatchSingleTaskFromBuffer(taskInfo *persistence.TaskInf
 	err := tr.dispatchTask(dispatchCtx, task)
 	timerScope.Stop()
 	cancel()
-
-	e := event.E{
-		TaskListName: tr.taskListID.GetName(),
-		TaskListType: tr.taskListID.GetType(),
-		TaskListKind: &tr.tlMgr.taskListKind,
-		TaskInfo:     *taskInfo,
-	}
 
 	if err == nil {
 		e.EventName = "Dispatched Buffered Task"
@@ -488,9 +494,9 @@ func (tr *taskReader) dispatchSingleTaskFromBuffer(taskInfo *persistence.TaskInf
 	}
 
 	if errors.Is(err, errTaskNotStarted) {
-		e.EventName = "Dispatch failed on completing task on the passive side because task not started. Will retry dispatch if task is not expired"
+		e.EventName = "Dispatch failed on completing task on the passive side because task not started."
 		event.Log(e)
-		return false, tr.isTaskExpired(taskInfo)
+		return false, false
 	}
 
 	if errors.Is(err, errWaitTimeNotReachedForEntityNotExists) {
