@@ -23,16 +23,15 @@
 package cli
 
 import (
-	"flag"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v2"
 	"go.uber.org/mock/gomock"
 
 	"github.com/uber/cadence/client/admin"
 	"github.com/uber/cadence/common/types"
+	"github.com/uber/cadence/tools/cli/clitest"
 )
 
 func TestAdminGetAsyncWFConfig(t *testing.T) {
@@ -44,7 +43,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 		setupMocks       func(*admin.MockClient)
 		expectedError    string
 		expectedStr      string
-		flagDomain       string
+		cmdline          string
 		mockDepsError    error
 		mockContextError error
 	}{
@@ -64,7 +63,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 			},
 			expectedError: "",
 			expectedStr:   "PredefinedQueueName",
-			flagDomain:    "test-domain",
+			cmdline:       "cadence --domain test-domain admin async-wf-queue get",
 		},
 		{
 			name: "Required flag not present",
@@ -72,7 +71,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 				// No call to the mock admin client is expected
 			},
 			expectedError: "Required flag not present:",
-			flagDomain:    "",
+			cmdline:       "cadence admin async-wf-queue get", // --domain is missing
 		},
 		{
 			name: "Config not found (resp.Configuration == nil)",
@@ -85,7 +84,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 					Times(1)
 			},
 			expectedError: "",
-			flagDomain:    "test-domain",
+			cmdline:       "cadence --domain test-domain admin async-wf-queue get",
 		},
 		{
 			name: "Failed to get async wf config",
@@ -96,7 +95,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 					Times(1)
 			},
 			expectedError: "Failed to get async wf queue config",
-			flagDomain:    "test-domain",
+			cmdline:       "cadence --domain test-domain admin async-wf-queue get",
 		},
 	}
 
@@ -114,15 +113,7 @@ func TestAdminGetAsyncWFConfig(t *testing.T) {
 				serverAdminClient: adminClient,
 			}, WithIOHandler(ioHandler))
 
-			// Set up CLI context with flags
-			set := flag.NewFlagSet("test", 0)
-			set.String(FlagDomain, tt.flagDomain, "Domain flag")
-			c := cli.NewContext(app, set, nil)
-
-			// Call the function under test
-			err := AdminGetAsyncWFConfig(c)
-
-			// Check the expected outcome
+			err := clitest.RunCommandLine(t, app, tt.cmdline)
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
@@ -143,8 +134,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 		name             string
 		setupMocks       func(*admin.MockClient)
 		expectedError    string
-		flagDomain       string
-		flagJSON         string
+		cmdline          string
 		mockContextError error
 		unmarshalError   error
 	}{
@@ -157,8 +147,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 					Times(1)
 			},
 			expectedError: "",
-			flagDomain:    "test-domain",
-			flagJSON:      `{"Enabled": true}`,
+			cmdline:       `cadence --domain test-domain admin async-wf-queue update --json '{"Enabled": true}'`,
 		},
 		{
 			name: "Required flag not present for domain",
@@ -166,8 +155,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 				// No call to the mock admin client is expected
 			},
 			expectedError: "Required flag not present:",
-			flagDomain:    "",
-			flagJSON:      `{"Enabled": true}`,
+			cmdline:       `cadence admin async-wf-queue update --json '{"Enabled": true}'`, // --domain is missing
 		},
 		{
 			name: "Required flag not present for JSON",
@@ -175,8 +163,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 				// No call to the mock admin client is expected
 			},
 			expectedError: "Required flag not present:",
-			flagDomain:    "test-domain",
-			flagJSON:      "",
+			cmdline:       `cadence --domain test-domain admin async-wf-queue update --json ""`, // empty --json flag
 		},
 		{
 			name: "Failed to parse async workflow config",
@@ -184,8 +171,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 				// No call setup for this test case as JSON parsing fails
 			},
 			expectedError:  "Failed to parse async workflow config",
-			flagDomain:     "test-domain",
-			flagJSON:       `invalid-json`,
+			cmdline:        `cadence --domain test-domain admin async-wf-queue update --json invalid-json`,
 			unmarshalError: fmt.Errorf("unmarshal error"),
 		},
 		{
@@ -197,8 +183,7 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 					Times(1)
 			},
 			expectedError: "Failed to update async workflow queue config",
-			flagDomain:    "test-domain",
-			flagJSON:      `{"Enabled": true}`,
+			cmdline:       `cadence --domain test-domain admin async-wf-queue update --json '{"Enabled": true}'`,
 		},
 	}
 
@@ -215,23 +200,13 @@ func TestAdminUpdateAsyncWFConfig(t *testing.T) {
 				serverAdminClient: adminClient,
 			})
 
-			// Set up CLI context with flags
-			set := flag.NewFlagSet("test", 0)
-			set.String(FlagDomain, tt.flagDomain, "Domain flag")
-			set.String(FlagJSON, tt.flagJSON, "JSON flag")
-			c := cli.NewContext(app, set, nil)
-
-			// Call the function under test
-			err := AdminUpdateAsyncWFConfig(c)
-
-			// Check the expected outcome
+			err := clitest.RunCommandLine(t, app, tt.cmdline)
 			if tt.expectedError != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedError)
 			} else {
 				assert.NoError(t, err)
 			}
-
 		})
 	}
 }

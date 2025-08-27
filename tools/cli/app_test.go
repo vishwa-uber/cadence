@@ -29,12 +29,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/flynn/go-shlex"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	"go.uber.org/mock/gomock"
@@ -44,6 +42,7 @@ import (
 	"github.com/uber/cadence/common"
 	"github.com/uber/cadence/common/config"
 	"github.com/uber/cadence/common/types"
+	"github.com/uber/cadence/tools/cli/clitest"
 )
 
 type (
@@ -159,10 +158,7 @@ func (s *cliAppSuite) runTestCase(tt testcase) {
 		tt.mock()
 	}
 
-	args, err := shlex.Split(tt.command)
-	require.NoError(s.T(), err)
-	err = s.app.Run(args)
-
+	err := clitest.RunCommandLine(s.T(), s.app, tt.command)
 	if tt.err != "" {
 		assert.ErrorContains(s.T(), err, tt.err)
 	} else {
