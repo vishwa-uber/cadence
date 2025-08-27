@@ -316,8 +316,8 @@ func (p *namespaceProcessor) rebalanceShardsImpl(ctx context.Context, metricsLoo
 
 func (p *namespaceProcessor) findShardsToReassign(activeExecutors []string, namespaceState *store.NamespaceState) ([]string, map[string][]string) {
 	allShards := make(map[string]struct{})
-	for _, shardID := range getShards(p.namespaceCfg) {
-		allShards[strconv.FormatInt(shardID, 10)] = struct{}{}
+	for _, shardID := range getShards(p.namespaceCfg, namespaceState) {
+		allShards[shardID] = struct{}{}
 	}
 
 	shardsToReassign := make([]string, 0)
@@ -449,17 +449,23 @@ func assignShardsToEmptyExecutors(currentAssignments map[string][]string) bool {
 	return true
 }
 
-func getShards(cfg config.Namespace) []int64 {
+func getShards(cfg config.Namespace, namespaceState *store.NamespaceState) []string {
 	if cfg.Type == config.NamespaceTypeFixed {
-		return makeRange(0, cfg.ShardNum-1)
+		return makeShards(cfg.ShardNum)
+	} else if cfg.Type == config.NamespaceTypeEphemeral {
+		shards := make([]string, 0)
+		for shardID := range namespaceState.Shards {
+			shards = append(shards, shardID)
+		}
+		return shards
 	}
 	return nil
 }
 
-func makeRange(min, max int64) []int64 {
-	a := make([]int64, max-min+1)
-	for i := range a {
-		a[i] = min + int64(i)
+func makeShards(num int64) []string {
+	shards := make([]string, num)
+	for i := range num {
+		shards[i] = strconv.FormatInt(i, 10)
 	}
-	return a
+	return shards
 }

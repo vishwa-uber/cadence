@@ -3,6 +3,7 @@ package process
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -386,15 +387,34 @@ func TestRebalanceShards_WithUnassignedShards(t *testing.T) {
 }
 
 func TestGetShards_Utility(t *testing.T) {
-	// Fixed type
-	cfg := config.Namespace{Type: config.NamespaceTypeFixed, ShardNum: 5}
-	shards := getShards(cfg)
-	assert.Equal(t, []int64{0, 1, 2, 3, 4}, shards)
+	t.Run("Fixed type", func(t *testing.T) {
+		cfg := config.Namespace{Type: config.NamespaceTypeFixed, ShardNum: 5}
+		shards := getShards(cfg, nil)
+		assert.Equal(t, []string{"0", "1", "2", "3", "4"}, shards)
+	})
 
-	// Other type
-	cfg = config.Namespace{Type: "other"}
-	shards = getShards(cfg)
-	assert.Nil(t, shards)
+	t.Run("Ephemeral type", func(t *testing.T) {
+		cfg := config.Namespace{Type: config.NamespaceTypeEphemeral}
+		nsState := &store.NamespaceState{
+			Shards: map[string]store.ShardState{
+				"s0": {ExecutorID: "exec-1"},
+				"s1": {ExecutorID: "exec-1"},
+				"s2": {ExecutorID: "exec-1"},
+				"s3": {ExecutorID: "exec-1"},
+				"s4": {ExecutorID: "exec-1"},
+			},
+		}
+		shards := getShards(cfg, nsState)
+		slices.Sort(shards)
+		assert.Equal(t, []string{"s0", "s1", "s2", "s3", "s4"}, shards)
+	})
+
+	// Unknown type
+	t.Run("Other type", func(t *testing.T) {
+		cfg := config.Namespace{Type: "other"}
+		shards := getShards(cfg, nil)
+		assert.Nil(t, shards)
+	})
 }
 
 func TestAssignShardsToEmptyExecutors(t *testing.T) {

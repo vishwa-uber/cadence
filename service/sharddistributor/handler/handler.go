@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 
@@ -92,6 +93,10 @@ func (h *handlerImpl) GetShardOwner(ctx context.Context, request *types.GetShard
 
 	executorID, err := h.storage.GetShardOwner(ctx, request.Namespace, request.ShardKey)
 	if errors.Is(err, store.ErrShardNotFound) {
+		if h.shardDistributionCfg.Namespaces[namespaceIdx].Type == config.NamespaceTypeEphemeral {
+			return h.assignEphemeralShard(ctx, request.Namespace, request.ShardKey)
+		}
+
 		return nil, &types.ShardNotFoundError{
 			Namespace: request.Namespace,
 			ShardKey:  request.ShardKey,
@@ -107,4 +112,34 @@ func (h *handlerImpl) GetShardOwner(ctx context.Context, request *types.GetShard
 	}
 
 	return resp, nil
+}
+
+func (h *handlerImpl) assignEphemeralShard(ctx context.Context, namespace string, shardID string) (*types.GetShardOwnerResponse, error) {
+
+	// Get the current state of the namespace and find the executor with the least assigned shards
+	state, err := h.storage.GetState(ctx, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("get state: %w", err)
+	}
+
+	var executor string
+	minAssignedShards := math.MaxInt
+
+	for assignedExecutor, assignment := range state.ShardAssignments {
+		if len(assignment.AssignedShards) < minAssignedShards {
+			minAssignedShards = len(assignment.AssignedShards)
+			executor = assignedExecutor
+		}
+	}
+
+	// Assign the shard to the executor with the least assigned shards
+	err = h.storage.AssignShard(ctx, namespace, shardID, executor)
+	if err != nil {
+		return nil, fmt.Errorf("assign ephemeral shard: %w", err)
+	}
+
+	return &types.GetShardOwnerResponse{
+		Owner:     executor,
+		Namespace: namespace,
+	}, nil
 }

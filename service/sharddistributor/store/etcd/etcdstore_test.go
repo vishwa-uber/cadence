@@ -377,8 +377,8 @@ func TestDeleteExecutors(t *testing.T) {
 	require.NoError(t, tc.store.RecordHeartbeat(ctx, tc.namespace, executorID2, store.HeartbeatState{Status: types.ExecutorStatusACTIVE}))
 	require.NoError(t, tc.store.RecordHeartbeat(ctx, tc.namespace, survivingExecutorID, store.HeartbeatState{Status: types.ExecutorStatusACTIVE}))
 
-	t.Run("DeletesExecutorAndAssignedShards", func(t *testing.T) {
-		shardID := "shard-to-be-deleted"
+	t.Run("DoesNotDeleteAssignedShards", func(t *testing.T) {
+		shardID := "shard-assigned"
 		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardID, executorID1), "Setup: Assign shard")
 
 		// Action: Delete the executor.
@@ -390,38 +390,10 @@ func TestDeleteExecutors(t *testing.T) {
 		_, _, err = tc.store.GetHeartbeat(ctx, tc.namespace, executorID1)
 		assert.ErrorIs(t, err, store.ErrExecutorNotFound, "Executor should be deleted")
 
-		// 2. Check that its assigned shard is also gone.
-		_, err = tc.store.GetShardOwner(ctx, tc.namespace, shardID)
-		assert.ErrorIs(t, err, store.ErrShardNotFound, "Assigned shard should be deleted")
-	})
-
-	t.Run("DoesNotDeleteShardIfReassigned", func(t *testing.T) {
-		shardID := "shard-reassigned"
-		// Setup:
-		// 1. Assign a shard to executor2.
-		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardID, executorID2))
-
-		// 2. Simulate a race condition: Manually reassign the shard to the 'surviving' executor
-		//    by directly writing to the shard owner key. This mimics a state where the distributor
-		//    reassigns the shard after DeleteExecutors has read the old state but before it commits.
-		shardOwnerKey := tc.store.buildShardKey(tc.namespace, shardID, shardAssignedKey)
-		_, err := tc.client.Put(ctx, shardOwnerKey, survivingExecutorID)
-		require.NoError(t, err, "Setup: Manually reassign shard owner")
-
-		// Action: Attempt to delete executor2. The transaction should proceed but should
-		// fail to delete the shard key because the owner no longer matches.
-		err = tc.store.DeleteExecutors(ctx, tc.namespace, []string{executorID2}, store.NopGuard())
-		require.NoError(t, err)
-
-		// Verification:
-		// 1. Check that executor2 is gone.
-		_, _, err = tc.store.GetHeartbeat(ctx, tc.namespace, executorID2)
-		assert.ErrorIs(t, err, store.ErrExecutorNotFound, "Executor should be deleted")
-
-		// 2. Check that the shard was NOT deleted and is still owned by the survivor.
+		// 2. Check that its assigned shard is not deleted.
 		owner, err := tc.store.GetShardOwner(ctx, tc.namespace, shardID)
-		require.NoError(t, err, "Shard should not have been deleted")
-		assert.Equal(t, survivingExecutorID, owner, "Shard ownership should have been preserved")
+		assert.NoError(t, err)
+		assert.Equal(t, executorID1, owner)
 	})
 
 	t.Run("SucceedsForNonExistentExecutor", func(t *testing.T) {
@@ -431,43 +403,45 @@ func TestDeleteExecutors(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("DeletesMultipleExecutorsAndShards", func(t *testing.T) {
+	t.Run("DeletesMultipleExecutors", func(t *testing.T) {
 		// Setup: Create and assign shards to multiple executors.
 		execToDelete1 := "multi-delete-1"
 		execToDelete2 := "multi-delete-2"
 		execToKeep := "multi-keep-1"
-		shardToDelete1 := "multi-shard-1"
-		shardToDelete2 := "multi-shard-2"
-		shardToKeep := "multi-shard-keep"
+		shardOfDeletedExecutor1 := "multi-shard-1"
+		shardOfDeletedExecutor2 := "multi-shard-2"
+		shardOfSurvivingExecutor := "multi-shard-keep"
 
 		require.NoError(t, tc.store.RecordHeartbeat(ctx, tc.namespace, execToDelete1, store.HeartbeatState{Status: types.ExecutorStatusACTIVE}))
 		require.NoError(t, tc.store.RecordHeartbeat(ctx, tc.namespace, execToDelete2, store.HeartbeatState{Status: types.ExecutorStatusACTIVE}))
 		require.NoError(t, tc.store.RecordHeartbeat(ctx, tc.namespace, execToKeep, store.HeartbeatState{Status: types.ExecutorStatusACTIVE}))
 
-		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardToDelete1, execToDelete1))
-		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardToDelete2, execToDelete2))
-		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardToKeep, execToKeep))
+		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardOfDeletedExecutor1, execToDelete1))
+		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardOfDeletedExecutor2, execToDelete2))
+		require.NoError(t, tc.store.AssignShard(ctx, tc.namespace, shardOfSurvivingExecutor, execToKeep))
 
 		// Action: Delete two of the three executors in one call.
 		err := tc.store.DeleteExecutors(ctx, tc.namespace, []string{execToDelete1, execToDelete2}, store.NopGuard())
 		require.NoError(t, err)
 
 		// Verification:
-		// 1. Check deleted executors and shards are gone.
+		// 1. Check deleted executors are gone, but their shards are not.
 		_, _, err = tc.store.GetHeartbeat(ctx, tc.namespace, execToDelete1)
 		assert.ErrorIs(t, err, store.ErrExecutorNotFound, "Executor 1 should be gone")
-		_, err = tc.store.GetShardOwner(ctx, tc.namespace, shardToDelete1)
-		assert.ErrorIs(t, err, store.ErrShardNotFound, "Shard 1 should be gone")
+		owner, err := tc.store.GetShardOwner(ctx, tc.namespace, shardOfDeletedExecutor1)
+		assert.NoError(t, err)
+		assert.Equal(t, execToDelete1, owner)
 
 		_, _, err = tc.store.GetHeartbeat(ctx, tc.namespace, execToDelete2)
 		assert.ErrorIs(t, err, store.ErrExecutorNotFound, "Executor 2 should be gone")
-		_, err = tc.store.GetShardOwner(ctx, tc.namespace, shardToDelete2)
-		assert.ErrorIs(t, err, store.ErrShardNotFound, "Shard 2 should be gone")
+		owner, err = tc.store.GetShardOwner(ctx, tc.namespace, shardOfDeletedExecutor2)
+		assert.NoError(t, err)
+		assert.Equal(t, execToDelete2, owner)
 
 		// 2. Check that the surviving executor and its shard remain.
 		_, _, err = tc.store.GetHeartbeat(ctx, tc.namespace, execToKeep)
 		assert.NoError(t, err, "Surviving executor should still exist")
-		owner, err := tc.store.GetShardOwner(ctx, tc.namespace, shardToKeep)
+		owner, err = tc.store.GetShardOwner(ctx, tc.namespace, shardOfSurvivingExecutor)
 		assert.NoError(t, err, "Surviving shard should still exist")
 		assert.Equal(t, execToKeep, owner, "Surviving shard should retain its owner")
 	})

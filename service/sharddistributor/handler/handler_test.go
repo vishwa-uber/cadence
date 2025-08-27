@@ -37,7 +37,8 @@ import (
 )
 
 const (
-	_testNamespace = "test-matching"
+	_testNamespaceFixed     = "test-fixed"
+	_testNamespaceEphemeral = "test-ephemeral"
 )
 
 func TestGetShardOwner(t *testing.T) {
@@ -45,7 +46,13 @@ func TestGetShardOwner(t *testing.T) {
 		Enabled: true,
 		Namespaces: []config.Namespace{
 			{
-				Name: _testNamespace,
+				Name:     _testNamespaceFixed,
+				Type:     config.NamespaceTypeFixed,
+				ShardNum: 32,
+			},
+			{
+				Name: _testNamespaceEphemeral,
+				Type: config.NamespaceTypeEphemeral,
 			},
 		},
 	}
@@ -59,19 +66,6 @@ func TestGetShardOwner(t *testing.T) {
 		expectedErrMsg string
 	}{
 		{
-			name: "Existing_Success",
-			request: &types.GetShardOwnerRequest{
-				Namespace: _testNamespace,
-				ShardKey:  "123",
-			},
-			setupMocks: func(mockStore *store.MockStore) {
-				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespace, "123").Return("owner1", nil)
-			},
-			expectedOwner: "owner1",
-			expectedError: false,
-		},
-
-		{
 			name: "InvalidNamespace",
 			request: &types.GetShardOwnerRequest{
 				Namespace: "namespace not found invalidNamespace",
@@ -83,26 +77,108 @@ func TestGetShardOwner(t *testing.T) {
 		{
 			name: "LookupError",
 			request: &types.GetShardOwnerRequest{
-				Namespace: _testNamespace,
+				Namespace: _testNamespaceFixed,
 				ShardKey:  "1",
 			},
 			setupMocks: func(mockStore *store.MockStore) {
-				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespace, "1").Return("", errors.New("lookup error"))
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceFixed, "1").Return("", errors.New("lookup error"))
 			},
 			expectedError:  true,
 			expectedErrMsg: "lookup error",
 		},
 		{
-			name: "ShardNotFound",
+			name: "Existing_Success_Fixed",
 			request: &types.GetShardOwnerRequest{
-				Namespace: _testNamespace,
+				Namespace: _testNamespaceFixed,
+				ShardKey:  "123",
+			},
+			setupMocks: func(mockStore *store.MockStore) {
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceFixed, "123").Return("owner1", nil)
+			},
+			expectedOwner: "owner1",
+			expectedError: false,
+		},
+		{
+			name: "ShardNotFound_Fixed",
+			request: &types.GetShardOwnerRequest{
+				Namespace: _testNamespaceFixed,
 				ShardKey:  "NON-EXISTING-SHARD",
 			},
 			setupMocks: func(mockStore *store.MockStore) {
-				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespace, "NON-EXISTING-SHARD").Return("", store.ErrShardNotFound)
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceFixed, "NON-EXISTING-SHARD").Return("", store.ErrShardNotFound)
 			},
 			expectedError:  true,
 			expectedErrMsg: "shard not found",
+		},
+		{
+			name: "Existing_Success_Ephemeral",
+			request: &types.GetShardOwnerRequest{
+				Namespace: _testNamespaceEphemeral,
+				ShardKey:  "123",
+			},
+			setupMocks: func(mockStore *store.MockStore) {
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceEphemeral, "123").Return("owner1", nil)
+			},
+			expectedOwner: "owner1",
+			expectedError: false,
+		},
+		{
+			name: "ShardNotFound_Ephemeral",
+			request: &types.GetShardOwnerRequest{
+				Namespace: _testNamespaceEphemeral,
+				ShardKey:  "NON-EXISTING-SHARD",
+			},
+			setupMocks: func(mockStore *store.MockStore) {
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceEphemeral, "NON-EXISTING-SHARD").Return("", store.ErrShardNotFound)
+				mockStore.EXPECT().GetState(gomock.Any(), _testNamespaceEphemeral).Return(&store.NamespaceState{
+					ShardAssignments: map[string]store.AssignedState{
+						"owner1": {
+							AssignedShards: map[string]*types.ShardAssignment{
+								"shard1": {Status: types.AssignmentStatusREADY},
+								"shard2": {Status: types.AssignmentStatusREADY},
+								"shard3": {Status: types.AssignmentStatusREADY},
+							},
+						},
+						"owner2": {
+							AssignedShards: map[string]*types.ShardAssignment{
+								"shard4": {Status: types.AssignmentStatusREADY},
+							},
+						},
+					},
+				}, nil)
+				// owner2 has the fewest shards assigned, so we assign the shard to it
+				mockStore.EXPECT().AssignShard(gomock.Any(), _testNamespaceEphemeral, "NON-EXISTING-SHARD", "owner2").Return(nil)
+			},
+			expectedOwner: "owner2",
+			expectedError: false,
+		},
+		{
+			name: "ShardNotFound_Ephemeral_GetStateFailure",
+			request: &types.GetShardOwnerRequest{
+				Namespace: _testNamespaceEphemeral,
+				ShardKey:  "NON-EXISTING-SHARD",
+			},
+			setupMocks: func(mockStore *store.MockStore) {
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceEphemeral, "NON-EXISTING-SHARD").Return("", store.ErrShardNotFound)
+				mockStore.EXPECT().GetState(gomock.Any(), _testNamespaceEphemeral).Return(nil, errors.New("get state failure"))
+			},
+			expectedError:  true,
+			expectedErrMsg: "get state failure",
+		},
+		{
+			name: "ShardNotFound_Ephemeral_AssignShardFailure",
+			request: &types.GetShardOwnerRequest{
+				Namespace: _testNamespaceEphemeral,
+				ShardKey:  "NON-EXISTING-SHARD",
+			},
+			setupMocks: func(mockStore *store.MockStore) {
+				mockStore.EXPECT().GetShardOwner(gomock.Any(), _testNamespaceEphemeral, "NON-EXISTING-SHARD").Return("", store.ErrShardNotFound)
+				mockStore.EXPECT().GetState(gomock.Any(), _testNamespaceEphemeral).Return(&store.NamespaceState{
+					ShardAssignments: map[string]store.AssignedState{"owner1": {AssignedShards: map[string]*types.ShardAssignment{}}}}, nil)
+				mockStore.EXPECT().AssignShard(gomock.Any(), _testNamespaceEphemeral, "NON-EXISTING-SHARD", "owner1").Return(errors.New("assign shard failure"))
+			},
+			expectedError:  true,
+			expectedErrMsg: "assign shard failure",
 		},
 	}
 
