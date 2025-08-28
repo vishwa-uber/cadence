@@ -157,7 +157,7 @@ func NewEngine(
 	}
 
 	e.shutdownCompletion.Add(1)
-	go e.subscribeToMembershipChanges()
+	go e.runMembershipChangeLoop()
 
 	return e
 }

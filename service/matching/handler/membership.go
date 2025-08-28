@@ -44,7 +44,7 @@ const subscriptionBufferSize = 1000
 // which host is the real owner of the tasklist.
 //
 // This is not the main shutdown process, its just an optimization.
-func (e *matchingEngineImpl) subscribeToMembershipChanges() {
+func (e *matchingEngineImpl) runMembershipChangeLoop() {
 	defer func() {
 		if r := recover(); r != nil {
 			e.logger.Error("matching membership watcher changes caused a panic, recovering", tag.Dynamic("recovered-panic", r))
