@@ -79,17 +79,17 @@ func (mr *MockStoreMockRecorder) AssignShard(ctx, namespace, shardID, executorID
 }
 
 // AssignShards mocks base method.
-func (m *MockStore) AssignShards(ctx context.Context, namespace string, newState *NamespaceState, guard GuardFunc) error {
+func (m *MockStore) AssignShards(ctx context.Context, namespace string, request AssignShardsRequest, guard GuardFunc) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AssignShards", ctx, namespace, newState, guard)
+	ret := m.ctrl.Call(m, "AssignShards", ctx, namespace, request, guard)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AssignShards indicates an expected call of AssignShards.
-func (mr *MockStoreMockRecorder) AssignShards(ctx, namespace, newState, guard any) *gomock.Call {
+func (mr *MockStoreMockRecorder) AssignShards(ctx, namespace, request, guard any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignShards", reflect.TypeOf((*MockStore)(nil).AssignShards), ctx, namespace, newState, guard)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssignShards", reflect.TypeOf((*MockStore)(nil).AssignShards), ctx, namespace, request, guard)
 }
 
 // DeleteExecutors mocks base method.

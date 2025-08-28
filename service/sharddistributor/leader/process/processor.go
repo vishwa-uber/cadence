@@ -292,12 +292,16 @@ func (p *namespaceProcessor) rebalanceShardsImpl(ctx context.Context, metricsLoo
 		return nil
 	}
 
-	shardsToReassign, currentAssignments := p.findShardsToReassign(activeExecutors, namespaceState)
+	deletedShards := p.findDeletedShards(namespaceState)
+	shardsToReassign, currentAssignments := p.findShardsToReassign(activeExecutors, namespaceState, deletedShards)
 
 	metricsLoopScope.UpdateGauge(metrics.ShardDistributorAssignLoopNumRebalancedShards, float64(len(shardsToReassign)))
 
-	distributionChanged := assignShardsToEmptyExecutors(currentAssignments)
+	// If there are deleted shards, we have removed them from the shard assignments, so the distribution has changed.
+	distributionChanged := len(deletedShards) > 0
+	distributionChanged = distributionChanged || assignShardsToEmptyExecutors(currentAssignments)
 	distributionChanged = distributionChanged || p.updateAssignments(shardsToReassign, activeExecutors, currentAssignments)
+
 	if !distributionChanged {
 		return nil
 	}
@@ -306,7 +310,10 @@ func (p *namespaceProcessor) rebalanceShardsImpl(ctx context.Context, metricsLoo
 
 	p.logger.Info("Applying new shard distribution.")
 	// Use the leader guard for the assign operation.
-	err = p.shardStore.AssignShards(ctx, p.namespaceCfg.Name, namespaceState, p.election.Guard())
+	err = p.shardStore.AssignShards(ctx, p.namespaceCfg.Name, store.AssignShardsRequest{
+		NewState:       namespaceState,
+		ShardsToDelete: deletedShards,
+	}, p.election.Guard())
 	if err != nil {
 		return fmt.Errorf("assign shards: %w", err)
 	}
@@ -314,9 +321,25 @@ func (p *namespaceProcessor) rebalanceShardsImpl(ctx context.Context, metricsLoo
 	return nil
 }
 
-func (p *namespaceProcessor) findShardsToReassign(activeExecutors []string, namespaceState *store.NamespaceState) ([]string, map[string][]string) {
+func (p *namespaceProcessor) findDeletedShards(namespaceState *store.NamespaceState) map[string]store.ShardState {
+	deletedShards := make(map[string]store.ShardState)
+
+	for executorID, executor := range namespaceState.Executors {
+		for shardID, shardState := range executor.ReportedShards {
+			if shardState.Status == types.ShardStatusDONE {
+				deletedShards[shardID] = store.ShardState{
+					ExecutorID: executorID,
+					Revision:   namespaceState.Shards[shardID].Revision,
+				}
+			}
+		}
+	}
+	return deletedShards
+}
+
+func (p *namespaceProcessor) findShardsToReassign(activeExecutors []string, namespaceState *store.NamespaceState, deletedShards map[string]store.ShardState) ([]string, map[string][]string) {
 	allShards := make(map[string]struct{})
-	for _, shardID := range getShards(p.namespaceCfg, namespaceState) {
+	for _, shardID := range getShards(p.namespaceCfg, namespaceState, deletedShards) {
 		allShards[shardID] = struct{}{}
 	}
 
@@ -449,13 +472,16 @@ func assignShardsToEmptyExecutors(currentAssignments map[string][]string) bool {
 	return true
 }
 
-func getShards(cfg config.Namespace, namespaceState *store.NamespaceState) []string {
+func getShards(cfg config.Namespace, namespaceState *store.NamespaceState, deletedShards map[string]store.ShardState) []string {
 	if cfg.Type == config.NamespaceTypeFixed {
 		return makeShards(cfg.ShardNum)
 	} else if cfg.Type == config.NamespaceTypeEphemeral {
 		shards := make([]string, 0)
 		for shardID := range namespaceState.Shards {
-			shards = append(shards, shardID)
+			// If the shard is deleted, we don't include it in the shards.
+			if _, ok := deletedShards[shardID]; !ok {
+				shards = append(shards, shardID)
+			}
 		}
 		return shards
 	}

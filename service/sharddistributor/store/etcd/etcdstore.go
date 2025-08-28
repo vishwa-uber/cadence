@@ -282,13 +282,13 @@ func (s *Store) Subscribe(ctx context.Context, namespace string) (<-chan int64, 
 	return revisionChan, nil
 }
 
-func (s *Store) AssignShards(ctx context.Context, namespace string, newState *store.NamespaceState, guard store.GuardFunc) error {
+func (s *Store) AssignShards(ctx context.Context, namespace string, request store.AssignShardsRequest, guard store.GuardFunc) error {
 	var ops []clientv3.Op
 	var comparisons []clientv3.Cmp
 
 	// 1. Prepare operations to update executor states and shard ownership,
 	// and comparisons to check for concurrent modifications.
-	for executorID, state := range newState.ShardAssignments {
+	for executorID, state := range request.NewState.ShardAssignments {
 		// Update the executor's assigned_state key.
 		executorStateKey := s.buildExecutorKey(namespace, executorID, executorAssignedStateKey)
 		value, err := json.Marshal(state)
@@ -303,7 +303,7 @@ func (s *Store) AssignShards(ctx context.Context, namespace string, newState *st
 			ops = append(ops, clientv3.OpPut(shardOwnerKey, executorID))
 
 			// Check the revision of the shard from the state we read in GetState.
-			previousShardState, ok := newState.Shards[shardID]
+			previousShardState, ok := request.NewState.Shards[shardID]
 			if ok {
 				// The shard existed before. Check that its revision has not changed.
 				// This handles moves and re-assignments to the same executor.
@@ -314,6 +314,12 @@ func (s *Store) AssignShards(ctx context.Context, namespace string, newState *st
 				comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(shardOwnerKey), "=", 0))
 			}
 		}
+	}
+
+	for shardID, shardState := range request.ShardsToDelete {
+		shardOwnerKey := s.buildShardKey(namespace, shardID, shardAssignedKey)
+		ops = append(ops, clientv3.OpDelete(shardOwnerKey))
+		comparisons = append(comparisons, clientv3.Compare(clientv3.ModRevision(shardOwnerKey), "=", shardState.Revision))
 	}
 
 	if len(ops) == 0 {

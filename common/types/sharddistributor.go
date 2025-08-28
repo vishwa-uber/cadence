@@ -152,13 +152,14 @@ func (v *ShardStatusReport) GetShardLoad() (o float64) {
 	return
 }
 
-// ShardStatus is ppersisted to the DB with a string value mapping.
+// ShardStatus is persisted to the DB with a string value mapping.
 // Beware - if we want to change the name - it should be backward compatible and should be done in two steps.
 type ShardStatus int32
 
 const (
 	ShardStatusINVALID ShardStatus = 0
 	ShardStatusREADY   ShardStatus = 1
+	ShardStatusDONE    ShardStatus = 2
 )
 
 type ExecutorHeartbeatResponse struct {

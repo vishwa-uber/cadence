@@ -30,7 +30,7 @@ type testDependencies struct {
 	cfg        config.Namespace
 }
 
-func setupProcessorTest(t *testing.T) *testDependencies {
+func setupProcessorTest(t *testing.T, namespaceType string) *testDependencies {
 	ctrl := gomock.NewController(t)
 	mockedClock := clock.NewMockedTimeSource()
 	return &testDependencies{
@@ -49,14 +49,14 @@ func setupProcessorTest(t *testing.T) *testDependencies {
 				},
 			},
 		),
-		cfg: config.Namespace{Name: "test-ns", ShardNum: 2, Type: config.NamespaceTypeFixed},
+		cfg: config.Namespace{Name: "test-ns", ShardNum: 2, Type: namespaceType},
 	}
 }
 
 func TestRunAndTerminate(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -82,7 +82,7 @@ func TestRunAndTerminate(t *testing.T) {
 }
 
 func TestRebalanceShards_InitialDistribution(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -93,10 +93,10 @@ func TestRebalanceShards_InitialDistribution(t *testing.T) {
 	mocks.store.EXPECT().GetState(gomock.Any(), mocks.cfg.Name).Return(&store.NamespaceState{Executors: state, GlobalRevision: 1}, nil)
 	mocks.election.EXPECT().Guard().Return(store.NopGuard())
 	mocks.store.EXPECT().AssignShards(gomock.Any(), mocks.cfg.Name, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, _ string, newState *store.NamespaceState, _ store.GuardFunc) error {
-			assert.Len(t, newState.ShardAssignments, 2)
-			assert.Len(t, newState.ShardAssignments["exec-1"].AssignedShards, 1)
-			assert.Len(t, newState.ShardAssignments["exec-2"].AssignedShards, 1)
+		func(_ context.Context, _ string, request store.AssignShardsRequest, _ store.GuardFunc) error {
+			assert.Len(t, request.NewState.ShardAssignments, 2)
+			assert.Len(t, request.NewState.ShardAssignments["exec-1"].AssignedShards, 1)
+			assert.Len(t, request.NewState.ShardAssignments["exec-2"].AssignedShards, 1)
 			return nil
 		},
 	)
@@ -107,7 +107,7 @@ func TestRebalanceShards_InitialDistribution(t *testing.T) {
 }
 
 func TestRebalanceShards_ExecutorRemoved(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -131,9 +131,9 @@ func TestRebalanceShards_ExecutorRemoved(t *testing.T) {
 	}, nil)
 	mocks.election.EXPECT().Guard().Return(store.NopGuard())
 	mocks.store.EXPECT().AssignShards(gomock.Any(), mocks.cfg.Name, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, _ string, newState *store.NamespaceState, _ store.GuardFunc) error {
-			assert.Len(t, newState.ShardAssignments["exec-1"].AssignedShards, 2)
-			assert.Len(t, newState.ShardAssignments["exec-2"].AssignedShards, 0)
+		func(_ context.Context, _ string, request store.AssignShardsRequest, _ store.GuardFunc) error {
+			assert.Len(t, request.NewState.ShardAssignments["exec-1"].AssignedShards, 2)
+			assert.Len(t, request.NewState.ShardAssignments["exec-2"].AssignedShards, 0)
 			return nil
 		},
 	)
@@ -143,7 +143,7 @@ func TestRebalanceShards_ExecutorRemoved(t *testing.T) {
 }
 
 func TestRebalanceShards_UpdatesShardStateOnReassign(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -178,19 +178,19 @@ func TestRebalanceShards_UpdatesShardStateOnReassign(t *testing.T) {
 
 	// We expect AssignShards to be called with the updated state.
 	mocks.store.EXPECT().AssignShards(gomock.Any(), mocks.cfg.Name, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, _ string, newState *store.NamespaceState, _ store.GuardFunc) error {
+		func(_ context.Context, _ string, request store.AssignShardsRequest, _ store.GuardFunc) error {
 			// Assert that the assignments were moved to exec-1.
-			assert.Len(t, newState.ShardAssignments["exec-1"].AssignedShards, 2)
-			assert.Len(t, newState.ShardAssignments["exec-2"].AssignedShards, 0)
+			assert.Len(t, request.NewState.ShardAssignments["exec-1"].AssignedShards, 2)
+			assert.Len(t, request.NewState.ShardAssignments["exec-2"].AssignedShards, 0)
 
 			// **Assert that the Shards map is correctly updated.**
 			// The ExecutorID should be updated to the new owner.
-			assert.Equal(t, "exec-1", newState.Shards["0"].ExecutorID)
-			assert.Equal(t, "exec-1", newState.Shards["1"].ExecutorID)
+			assert.Equal(t, "exec-1", request.NewState.Shards["0"].ExecutorID)
+			assert.Equal(t, "exec-1", request.NewState.Shards["1"].ExecutorID)
 
 			// The Revision should be preserved from the original state.
-			assert.Equal(t, int64(101), newState.Shards["0"].Revision)
-			assert.Equal(t, int64(102), newState.Shards["1"].Revision)
+			assert.Equal(t, int64(101), request.NewState.Shards["0"].Revision)
+			assert.Equal(t, int64(102), request.NewState.Shards["1"].Revision)
 			return nil
 		},
 	)
@@ -200,7 +200,7 @@ func TestRebalanceShards_UpdatesShardStateOnReassign(t *testing.T) {
 }
 
 func TestRebalanceShards_NoActiveExecutors(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -214,7 +214,7 @@ func TestRebalanceShards_NoActiveExecutors(t *testing.T) {
 }
 
 func TestRebalanceShards_NoRebalanceNeeded(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 	processor.lastAppliedRevision = 1
@@ -226,7 +226,7 @@ func TestRebalanceShards_NoRebalanceNeeded(t *testing.T) {
 }
 
 func TestCleanupStaleExecutors(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 	now := mocks.timeSource.Now()
@@ -244,7 +244,7 @@ func TestCleanupStaleExecutors(t *testing.T) {
 }
 
 func TestRebalance_StoreErrors(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 	expectedErr := errors.New("store is down")
@@ -266,7 +266,7 @@ func TestRebalance_StoreErrors(t *testing.T) {
 }
 
 func TestCleanup_StoreErrors(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 	expectedErr := errors.New("store is down")
@@ -284,7 +284,7 @@ func TestCleanup_StoreErrors(t *testing.T) {
 }
 
 func TestRunLoop_SubscriptionError(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -302,7 +302,7 @@ func TestRunLoop_SubscriptionError(t *testing.T) {
 }
 
 func TestRunLoop_ContextCancellation(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -326,7 +326,7 @@ func TestRunLoop_ContextCancellation(t *testing.T) {
 }
 
 func TestRebalanceShards_NoShardsToReassign(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -354,7 +354,7 @@ func TestRebalanceShards_NoShardsToReassign(t *testing.T) {
 }
 
 func TestRebalanceShards_WithUnassignedShards(t *testing.T) {
-	mocks := setupProcessorTest(t)
+	mocks := setupProcessorTest(t, config.NamespaceTypeFixed)
 	defer mocks.ctrl.Finish()
 	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
 
@@ -376,8 +376,74 @@ func TestRebalanceShards_WithUnassignedShards(t *testing.T) {
 	}, nil)
 	mocks.election.EXPECT().Guard().Return(store.NopGuard())
 	mocks.store.EXPECT().AssignShards(gomock.Any(), mocks.cfg.Name, gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, _ string, newState *store.NamespaceState, _ store.GuardFunc) error {
-			assert.Len(t, newState.ShardAssignments["exec-1"].AssignedShards, 2, "Both shards should now be assigned to exec-1")
+		func(_ context.Context, _ string, request store.AssignShardsRequest, _ store.GuardFunc) error {
+			assert.Len(t, request.NewState.ShardAssignments["exec-1"].AssignedShards, 2, "Both shards should now be assigned to exec-1")
+			return nil
+		},
+	)
+
+	err := processor.rebalanceShards(context.Background())
+	require.NoError(t, err)
+}
+
+func TestRebalanceShards_WithDeletedShards(t *testing.T) {
+	mocks := setupProcessorTest(t, config.NamespaceTypeEphemeral)
+	defer mocks.ctrl.Finish()
+	processor := mocks.factory.CreateProcessor(mocks.cfg, mocks.store, mocks.election).(*namespaceProcessor)
+
+	heartbeats := map[string]store.HeartbeatState{
+		"exec-1": {
+			Status: types.ExecutorStatusACTIVE,
+			ReportedShards: map[string]*types.ShardStatusReport{
+				"0": {Status: types.ShardStatusDONE},
+				"1": {Status: types.ShardStatusDONE},
+				"2": {Status: types.ShardStatusREADY},
+			},
+		},
+		"exec-2": {
+			Status:         types.ExecutorStatusACTIVE,
+			ReportedShards: map[string]*types.ShardStatusReport{},
+		},
+	}
+	assignments := map[string]store.AssignedState{
+		"exec-1": {
+			AssignedShards: map[string]*types.ShardAssignment{
+				"1": {Status: types.AssignmentStatusREADY},
+				"2": {Status: types.AssignmentStatusREADY},
+			},
+		},
+		// One of the deleted shards were reassigned to exec-2, it should still be deleted
+		"exec-2": {
+			AssignedShards: map[string]*types.ShardAssignment{
+				"0": {Status: types.AssignmentStatusREADY},
+				"3": {Status: types.AssignmentStatusREADY},
+				"4": {Status: types.AssignmentStatusREADY},
+			},
+		},
+	}
+
+	shards := map[string]store.ShardState{
+		"0": {ExecutorID: "exec-2"},
+		"1": {ExecutorID: "exec-1"},
+		"2": {ExecutorID: "exec-1"},
+		"3": {ExecutorID: "exec-2"},
+		"4": {ExecutorID: "exec-2"},
+	}
+	mocks.store.EXPECT().GetState(gomock.Any(), mocks.cfg.Name).Return(&store.NamespaceState{
+		Executors:        heartbeats,
+		ShardAssignments: assignments,
+		GlobalRevision:   3,
+		Shards:           shards,
+	}, nil)
+	mocks.election.EXPECT().Guard().Return(store.NopGuard())
+	mocks.store.EXPECT().AssignShards(gomock.Any(), mocks.cfg.Name, gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, _ string, request store.AssignShardsRequest, _ store.GuardFunc) error {
+			assert.Contains(t, request.ShardsToDelete, "0")
+			assert.Contains(t, request.ShardsToDelete, "1")
+
+			assert.Contains(t, request.NewState.ShardAssignments["exec-1"].AssignedShards, "2")
+			assert.Contains(t, request.NewState.ShardAssignments["exec-2"].AssignedShards, "3")
+			assert.Contains(t, request.NewState.ShardAssignments["exec-2"].AssignedShards, "4")
 			return nil
 		},
 	)
@@ -389,7 +455,7 @@ func TestRebalanceShards_WithUnassignedShards(t *testing.T) {
 func TestGetShards_Utility(t *testing.T) {
 	t.Run("Fixed type", func(t *testing.T) {
 		cfg := config.Namespace{Type: config.NamespaceTypeFixed, ShardNum: 5}
-		shards := getShards(cfg, nil)
+		shards := getShards(cfg, nil, nil)
 		assert.Equal(t, []string{"0", "1", "2", "3", "4"}, shards)
 	})
 
@@ -404,15 +470,35 @@ func TestGetShards_Utility(t *testing.T) {
 				"s4": {ExecutorID: "exec-1"},
 			},
 		}
-		shards := getShards(cfg, nsState)
+		shards := getShards(cfg, nsState, nil)
 		slices.Sort(shards)
 		assert.Equal(t, []string{"s0", "s1", "s2", "s3", "s4"}, shards)
+	})
+
+	t.Run("Ephemeral type with deleted shards", func(t *testing.T) {
+		cfg := config.Namespace{Type: config.NamespaceTypeEphemeral}
+		nsState := &store.NamespaceState{
+			Shards: map[string]store.ShardState{
+				"s0": {ExecutorID: "exec-1"},
+				"s1": {ExecutorID: "exec-1"},
+				"s2": {ExecutorID: "exec-1"},
+				"s3": {ExecutorID: "exec-1"},
+				"s4": {ExecutorID: "exec-1"},
+			},
+		}
+		deletedShards := map[string]store.ShardState{
+			"s0": {},
+			"s1": {},
+		}
+		shards := getShards(cfg, nsState, deletedShards)
+		slices.Sort(shards)
+		assert.Equal(t, []string{"s2", "s3", "s4"}, shards)
 	})
 
 	// Unknown type
 	t.Run("Other type", func(t *testing.T) {
 		cfg := config.Namespace{Type: "other"}
-		shards := getShards(cfg, nil)
+		shards := getShards(cfg, nil, nil)
 		assert.Nil(t, shards)
 	})
 }

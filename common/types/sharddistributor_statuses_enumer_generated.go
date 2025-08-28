@@ -103,11 +103,11 @@ func (i *ExecutorStatus) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-const _ShardStatusName = "ShardStatusINVALIDShardStatusREADY"
+const _ShardStatusName = "ShardStatusINVALIDShardStatusREADYShardStatusDONE"
 
-var _ShardStatusIndex = [...]uint8{0, 18, 34}
+var _ShardStatusIndex = [...]uint8{0, 18, 34, 49}
 
-const _ShardStatusLowerName = "shardstatusinvalidshardstatusready"
+const _ShardStatusLowerName = "shardstatusinvalidshardstatusreadyshardstatusdone"
 
 func (i ShardStatus) String() string {
 	if i < 0 || i >= ShardStatus(len(_ShardStatusIndex)-1) {
@@ -122,20 +122,24 @@ func _ShardStatusNoOp() {
 	var x [1]struct{}
 	_ = x[ShardStatusINVALID-(0)]
 	_ = x[ShardStatusREADY-(1)]
+	_ = x[ShardStatusDONE-(2)]
 }
 
-var _ShardStatusValues = []ShardStatus{ShardStatusINVALID, ShardStatusREADY}
+var _ShardStatusValues = []ShardStatus{ShardStatusINVALID, ShardStatusREADY, ShardStatusDONE}
 
 var _ShardStatusNameToValueMap = map[string]ShardStatus{
 	_ShardStatusName[0:18]:       ShardStatusINVALID,
 	_ShardStatusLowerName[0:18]:  ShardStatusINVALID,
 	_ShardStatusName[18:34]:      ShardStatusREADY,
 	_ShardStatusLowerName[18:34]: ShardStatusREADY,
+	_ShardStatusName[34:49]:      ShardStatusDONE,
+	_ShardStatusLowerName[34:49]: ShardStatusDONE,
 }
 
 var _ShardStatusNames = []string{
 	_ShardStatusName[0:18],
 	_ShardStatusName[18:34],
+	_ShardStatusName[34:49],
 }
 
 // ShardStatusString retrieves an enum value from the enum constants string name.

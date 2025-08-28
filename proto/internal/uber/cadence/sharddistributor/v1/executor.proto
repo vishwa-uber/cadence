@@ -57,6 +57,7 @@ message ShardStatusReport {
 enum ShardStatus {
   SHARD_STATUS_INVALID = 0;
   SHARD_STATUS_READY = 1;
+  SHARD_STATUS_DONE = 2;
 }
 
 
