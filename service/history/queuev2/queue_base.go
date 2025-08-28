@@ -82,7 +82,7 @@ type (
 		timeSource      clock.TimeSource
 		taskInitializer task.Initializer
 
-		redispatcher          task.Redispatcher
+		rescheduler           task.Rescheduler
 		queueReader           QueueReader
 		monitor               Monitor
 		mitigator             Mitigator
@@ -114,12 +114,9 @@ func newQueueBase(
 	queueState := FromPersistenceQueueState(persistenceQueueState)
 	exclusiveAckLevel, _ := getExclusiveAckLevelAndMaxQueueIDFromQueueState(queueState)
 
-	redispatcher := task.NewRedispatcher(
+	rescheduler := task.NewRescheduler(
 		taskProcessor,
 		timeSource,
-		&task.RedispatcherOptions{
-			TaskRedispatchInterval: options.RedispatchInterval,
-		},
 		logger,
 		metricsScope,
 	)
@@ -130,15 +127,14 @@ func newQueueBase(
 		queueType = task.QueueTypeTimer
 	}
 	taskInitializer := func(t persistence.Task) task.Task {
-		return task.NewHistoryTask(
+		return task.NewHistoryTaskV2(
 			shard,
 			t,
 			queueType,
 			task.InitializeLoggerForTask(shard.GetShardID(), t, logger),
-			func(task persistence.Task) (bool, error) { return true, nil },
 			taskExecutor,
 			taskProcessor,
-			redispatcher,
+			rescheduler,
 			shard.GetConfig().TaskCriticalRetryCount,
 		)
 	}
@@ -155,7 +151,7 @@ func newQueueBase(
 	)
 	virtualQueueManager := NewVirtualQueueManager(
 		taskProcessor,
-		redispatcher,
+		rescheduler,
 		taskInitializer,
 		queueReader,
 		logger,
@@ -204,7 +200,7 @@ func newQueueBase(
 		options:             options,
 		timeSource:          timeSource,
 		taskInitializer:     taskInitializer,
-		redispatcher:        redispatcher,
+		rescheduler:         rescheduler,
 		queueReader:         queueReader,
 		monitor:             monitor,
 		mitigator:           mitigator,
@@ -224,7 +220,7 @@ func newQueueBase(
 }
 
 func (q *queueBase) Start() {
-	q.redispatcher.Start()
+	q.rescheduler.Start()
 	q.virtualQueueManager.Start()
 
 	q.updateQueueStateTimer = q.timeSource.NewTimer(backoff.JitDuration(
@@ -239,14 +235,16 @@ func (q *queueBase) Stop() {
 	q.monitor.Unsubscribe()
 	q.updateQueueStateTimer.Stop()
 	q.virtualQueueManager.Stop()
-	q.redispatcher.Stop()
+	q.rescheduler.Stop()
 }
 
 func (q *queueBase) Category() persistence.HistoryTaskCategory {
 	return q.category
 }
 
-func (q *queueBase) FailoverDomain(domainIDs map[string]struct{}) {}
+func (q *queueBase) FailoverDomain(domainIDs map[string]struct{}) {
+	q.rescheduler.RescheduleDomains(domainIDs)
+}
 
 func (q *queueBase) HandleAction(ctx context.Context, clusterName string, action *queue.Action) (*queue.ActionResult, error) {
 	return nil, nil

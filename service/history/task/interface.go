@@ -90,11 +90,17 @@ type (
 	Redispatcher interface {
 		common.Daemon
 		AddTask(Task)
-		RedispatchTask(Task, time.Time)
 		Redispatch(targetSize int)
+		RedispatchTask(Task, time.Time)
 		Size() int
 	}
 
+	Rescheduler interface {
+		common.Daemon
+		RescheduleTask(Task, time.Time)
+		RescheduleDomains(domainIDs map[string]struct{})
+		Size() int
+	}
 	// Fetcher is a host level component for aggregating task fetch requests
 	// from all shards on the host and perform one fetching operation for
 	// aggregated requests.
