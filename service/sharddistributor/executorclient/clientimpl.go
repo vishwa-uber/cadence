@@ -130,9 +130,11 @@ func (e *executorImpl[SP]) heartbeat(ctx context.Context) (shardAssignments map[
 	shardStatusReports := make(map[string]*types.ShardStatusReport)
 	e.managedProcessors.Range(func(shardID string, managedProcessor *managedProcessor[SP]) bool {
 		if managedProcessor.getState() == processorStateStarted {
+			shardStatus := managedProcessor.processor.GetShardReport()
+
 			shardStatusReports[shardID] = &types.ShardStatusReport{
-				ShardLoad: managedProcessor.processor.GetShardLoad(),
-				Status:    types.ShardStatusREADY,
+				ShardLoad: shardStatus.ShardLoad,
+				Status:    shardStatus.Status,
 			}
 		}
 		return true

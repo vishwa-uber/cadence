@@ -119,9 +119,9 @@ func TestHeartbeat(t *testing.T) {
 	}, nil)
 
 	shardProcessorMock1 := NewMockShardProcessor(ctrl)
-	shardProcessorMock1.EXPECT().GetShardLoad().Return(0.123)
+	shardProcessorMock1.EXPECT().GetShardReport().Return(ShardReport{ShardLoad: 0.123, Status: types.ShardStatusREADY})
 	shardProcessorMock2 := NewMockShardProcessor(ctrl)
-	shardProcessorMock2.EXPECT().GetShardLoad().Return(0.456)
+	shardProcessorMock2.EXPECT().GetShardReport().Return(ShardReport{ShardLoad: 0.456, Status: types.ShardStatusREADY})
 
 	// Create the executor
 	executor := &executorImpl[*MockShardProcessor]{

@@ -15,15 +15,21 @@ import (
 	"github.com/uber/cadence/common/clock"
 	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/common/metrics"
+	"github.com/uber/cadence/common/types"
 	"github.com/uber/cadence/service/sharddistributor/executorclient/metricsconstants"
 )
 
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination interface_mock.go . ShardProcessorFactory,ShardProcessor,Executor
 
+type ShardReport struct {
+	ShardLoad float64
+	Status    types.ShardStatus
+}
+
 type ShardProcessor interface {
 	Start(ctx context.Context)
 	Stop()
-	GetShardLoad() float64
+	GetShardReport() ShardReport
 }
 
 type ShardProcessorFactory[SP ShardProcessor] interface {
