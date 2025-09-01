@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Geneate rate limiter wrappers.
+// Generate rate limiter wrappers.
 //go:generate mockgen -package $GOPACKAGE -destination data_manager_interfaces_mock.go github.com/uber/cadence/common/persistence Task,ShardManager,ExecutionManager,ExecutionManagerFactory,TaskManager,HistoryManager,DomainManager,QueueManager,ConfigStoreManager
 //go:generate gowrap gen -g -p . -i ConfigStoreManager -t ./wrappers/templates/ratelimited.tmpl -o wrappers/ratelimited/configstore_generated.go
 //go:generate gowrap gen -g -p . -i DomainManager -t ./wrappers/templates/ratelimited.tmpl -o wrappers/ratelimited/domain_generated.go
@@ -29,7 +29,7 @@
 //go:generate gowrap gen -g -p . -i TaskManager -t ./wrappers/templates/ratelimited.tmpl -o wrappers/ratelimited/task_generated.go
 //go:generate gowrap gen -g -p . -i ShardManager -t ./wrappers/templates/ratelimited.tmpl -o wrappers/ratelimited/shard_generated.go
 
-// Geneate error injector wrappers.
+// Generate error injector wrappers.
 //go:generate gowrap gen -g -p . -i ConfigStoreManager -t ./wrappers/templates/errorinjector.tmpl -o wrappers/errorinjectors/configstore_generated.go
 //go:generate gowrap gen -g -p . -i ShardManager -t ./wrappers/templates/errorinjector.tmpl -o wrappers/errorinjectors/shard_generated.go
 //go:generate gowrap gen -g -p . -i ExecutionManager -t ./wrappers/templates/errorinjector.tmpl -o wrappers/errorinjectors/execution_generated.go
@@ -53,6 +53,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -89,7 +90,7 @@ type CreateWorkflowMode int
 // QueueType is an enum that represents various queue types in persistence
 type QueueType int
 
-// Queue types used in queue table
+// DomainReplicationQueueType queue types used in queue table
 // Use positive numbers for queue type
 // Negative numbers are reserved for DLQ
 const (
@@ -98,16 +99,16 @@ const (
 
 // Create Workflow Execution Mode
 const (
-	// Fail if current record exists
+	// CreateWorkflowModeBrandNew Fail if current record exists
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeBrandNew CreateWorkflowMode = iota
-	// Update current record only if workflow is closed
+	// CreateWorkflowModeWorkflowIDReuse Update current record only if workflow is closed
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeWorkflowIDReuse
-	// Update current record only if workflow is open
+	// CreateWorkflowModeContinueAsNew Update current record only if workflow is open
 	// Only applicable for UpdateWorkflowExecution
 	CreateWorkflowModeContinueAsNew
-	// Do not update current record since workflow to
+	// CreateWorkflowModeZombie Do not update current record since workflow to
 	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
 	CreateWorkflowModeZombie
 )
@@ -117,13 +118,13 @@ type UpdateWorkflowMode int
 
 // Update Workflow Execution Mode
 const (
-	// Update workflow, including current record
+	// UpdateWorkflowModeUpdateCurrent Update workflow, including current record
 	// NOTE: update on current record is a condition update
 	UpdateWorkflowModeUpdateCurrent UpdateWorkflowMode = iota
-	// Update workflow, without current record
+	// UpdateWorkflowModeBypassCurrent Update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
-	// Update workflow, ignoring current record
+	// UpdateWorkflowModeIgnoreCurrent Update workflow, ignoring current record
 	// NOTE: current record may or may not point to the workflow
 	// this mode should only be used for (re-)generating workflow tasks
 	// and there's no other changes to the workflow
@@ -135,10 +136,10 @@ type ConflictResolveWorkflowMode int
 
 // Conflict Resolve Workflow Mode
 const (
-	// Conflict resolve workflow, including current record
+	// ConflictResolveWorkflowModeUpdateCurrent Conflict resolve workflow, including current record
 	// NOTE: update on current record is a condition update
 	ConflictResolveWorkflowModeUpdateCurrent ConflictResolveWorkflowMode = iota
-	// Conflict resolve workflow, without current record
+	// ConflictResolveWorkflowModeBypassCurrent Conflict resolve workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	ConflictResolveWorkflowModeBypassCurrent
 )
@@ -241,16 +242,6 @@ const (
 	TransferTaskTypeApplyParentClosePolicy // Deprecated: this is related to cross-cluster tasks
 )
 
-// Deprecated: Types of cross-cluster tasks. These are deprecated as of
-// May 2024
-const (
-	CrossClusterTaskTypeStartChildExecution = iota + 1
-	CrossClusterTaskTypeCancelExecution
-	CrossClusterTaskTypeSignalExecution
-	CrossClusterTaskTypeRecordChildExeuctionCompleted
-	CrossClusterTaskTypeApplyParentClosePolicy
-)
-
 // Types of replication tasks
 const (
 	ReplicationTaskTypeHistory = iota
@@ -285,11 +276,11 @@ type CreateWorkflowRequestMode int
 
 // Modes of create workflow request
 const (
-	// Fail if data with the same domain_id, workflow_id, request_id exists
+	// CreateWorkflowRequestModeNew Fail if data with the same domain_id, workflow_id, request_id exists
 	// It is used for transactions started by external API requests
 	// to allow us detecting duplicate requests
 	CreateWorkflowRequestModeNew CreateWorkflowRequestMode = iota
-	// Upsert the data without checking duplication
+	// CreateWorkflowRequestModeReplicated Upsert the data without checking duplication
 	// It is used for transactions started by replication stack to achieve
 	// eventual consistency
 	CreateWorkflowRequestModeReplicated
@@ -308,16 +299,12 @@ const (
 	// InitialFailoverNotificationVersion is the initial failover version for a domain
 	InitialFailoverNotificationVersion int64 = 0
 
-	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
+	// TransferTaskTransferTargetWorkflowID is the dummy workflow ID for transfer tasks of types
 	// that do not have a target workflow
 	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
-	// TransferTaskTransferTargetRunID is the the dummy run ID for transfer tasks of types
+	// TransferTaskTransferTargetRunID is the dummy run ID for transfer tasks of types
 	// that do not have a target workflow
 	TransferTaskTransferTargetRunID = "30000000-0000-f000-f000-000000000002"
-	// Deprecated: This is deprecated as of May 24
-	// CrossClusterTaskDefaultTargetRunID is the the dummy run ID for cross-cluster tasks of types
-	// that do not have a target workflow
-	CrossClusterTaskDefaultTargetRunID = TransferTaskTransferTargetRunID
 
 	// indicate invalid workflow state transition
 	invalidStateTransitionMsg = "unable to change workflow state from %v to %v, close status %v"
@@ -731,7 +718,7 @@ type (
 		RangeID    int64
 	}
 
-	// GetWorkflowExecutionResponse is the response to GetworkflowExecutionRequest
+	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
 		State             *WorkflowMutableState
 		MutableStateStats *MutableStateStats
@@ -819,7 +806,7 @@ type (
 
 		Mode ConflictResolveWorkflowMode
 
-		// workflow to be resetted
+		// workflow to be reset
 		ResetWorkflowSnapshot WorkflowSnapshot
 
 		// maybe new workflow
@@ -1066,7 +1053,7 @@ type (
 		Size int64
 	}
 
-	// CreateTasksRequest is used to create a new task for a workflow exectution
+	// CreateTasksRequest is used to create a new task for a workflow execution
 	CreateTasksRequest struct {
 		TaskListInfo     *TaskListInfo
 		Tasks            []*CreateTaskInfo
@@ -1537,6 +1524,7 @@ type (
 		IsWorkflowExecutionExists(ctx context.Context, request *IsWorkflowExecutionExistsRequest) (*IsWorkflowExecutionExistsResponse, error)
 
 		// Replication task related methods
+
 		PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (*GetHistoryTasksResponse, error)
 		GetReplicationDLQSize(ctx context.Context, request *GetReplicationDLQSizeRequest) (*GetReplicationDLQSizeResponse, error)
@@ -1549,6 +1537,7 @@ type (
 		RangeCompleteHistoryTask(ctx context.Context, request *RangeCompleteHistoryTaskRequest) (*RangeCompleteHistoryTaskResponse, error)
 
 		// Scan operations
+
 		ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
 		ListCurrentExecutions(ctx context.Context, request *ListCurrentExecutionsRequest) (*ListCurrentExecutionsResponse, error)
 
@@ -1597,7 +1586,7 @@ type (
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
 		ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
-		// ForkHistoryBranch forks a new branch from a old branch
+		// ForkHistoryBranch forks a new branch from an old branch
 		ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
@@ -1657,7 +1646,8 @@ type (
 
 // IsTimeoutError check whether error is TimeoutError
 func IsTimeoutError(err error) bool {
-	_, ok := err.(*TimeoutError)
+	var timeoutError *TimeoutError
+	ok := errors.As(err, &timeoutError)
 	return ok
 }
 
@@ -1940,6 +1930,7 @@ func (t *TimerTaskInfo) ToTask() (Task, error) {
 	}
 }
 
+// ToNilSafeCopy
 // TODO: it seems that we just need a nil safe shardInfo, deep copy is not necessary
 func (s *ShardInfo) ToNilSafeCopy() *ShardInfo {
 	if s == nil {
@@ -2041,23 +2032,23 @@ func (s *ShardInfo) copy() *ShardInfo {
 // SerializeClusterConfigs makes an array of *ClusterReplicationConfig serializable
 // by flattening them into map[string]interface{}
 func SerializeClusterConfigs(replicationConfigs []*ClusterReplicationConfig) []map[string]interface{} {
-	seriaizedReplicationConfigs := []map[string]interface{}{}
+	var serializedReplicationConfigs []map[string]interface{}
 	for index := range replicationConfigs {
-		seriaizedReplicationConfigs = append(seriaizedReplicationConfigs, replicationConfigs[index].serialize())
+		serializedReplicationConfigs = append(serializedReplicationConfigs, replicationConfigs[index].serialize())
 	}
-	return seriaizedReplicationConfigs
+	return serializedReplicationConfigs
 }
 
 // DeserializeClusterConfigs creates an array of ClusterReplicationConfigs from an array of map representations
 func DeserializeClusterConfigs(replicationConfigs []map[string]interface{}) []*ClusterReplicationConfig {
-	deseriaizedReplicationConfigs := []*ClusterReplicationConfig{}
+	deserializedReplicationConfigs := []*ClusterReplicationConfig{}
 	for index := range replicationConfigs {
-		deseriaizedReplicationConfig := &ClusterReplicationConfig{}
-		deseriaizedReplicationConfig.deserialize(replicationConfigs[index])
-		deseriaizedReplicationConfigs = append(deseriaizedReplicationConfigs, deseriaizedReplicationConfig)
+		deserializedReplicationConfig := &ClusterReplicationConfig{}
+		deserializedReplicationConfig.deserialize(replicationConfigs[index])
+		deserializedReplicationConfigs = append(deserializedReplicationConfigs, deserializedReplicationConfig)
 	}
 
-	return deseriaizedReplicationConfigs
+	return deserializedReplicationConfigs
 }
 
 func (config *ClusterReplicationConfig) serialize() map[string]interface{} {
@@ -2175,8 +2166,11 @@ func NewGetReplicationTasksFromDLQRequest(
 
 // IsTransientError checks if the error is a transient persistence error
 func IsTransientError(err error) bool {
-	switch err.(type) {
-	case *types.InternalServiceError, *types.ServiceBusyError, *TimeoutError:
+	var internalServiceError *types.InternalServiceError
+	var serviceBusyError *types.ServiceBusyError
+	var timeoutError *TimeoutError
+	switch {
+	case errors.As(err, &internalServiceError), errors.As(err, &serviceBusyError), errors.As(err, &timeoutError):
 		return true
 	}
 
@@ -2185,8 +2179,10 @@ func IsTransientError(err error) bool {
 
 // IsBackgroundTransientError checks if the error is a transient error on background jobs
 func IsBackgroundTransientError(err error) bool {
-	switch err.(type) {
-	case *types.InternalServiceError, *TimeoutError:
+	var internalServiceError *types.InternalServiceError
+	var timeoutError *TimeoutError
+	switch {
+	case errors.As(err, &internalServiceError), errors.As(err, &timeoutError):
 		return true
 	}
 
@@ -2286,7 +2282,8 @@ func (p *TaskListPartition) ToInternalType() *types.TaskListPartition {
 	return &types.TaskListPartition{IsolationGroups: p.IsolationGroups}
 }
 
+// IsActiveActive
 // TODO(active-active): Update unit tests of all components that use this function to cover active-active case
-func (d *DomainReplicationConfig) IsActiveActive() bool {
-	return d != nil && d.ActiveClusters != nil && len(d.ActiveClusters.ActiveClustersByRegion) > 0
+func (c *DomainReplicationConfig) IsActiveActive() bool {
+	return c != nil && c.ActiveClusters != nil && len(c.ActiveClusters.ActiveClustersByRegion) > 0
 }
