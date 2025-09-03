@@ -123,11 +123,9 @@ type getTasksResult struct {
 }
 
 func (t *TaskAckManager) getTasks(ctx context.Context, pollingCluster string, lastReadTaskID int64) (*getTasksResult, error) {
-	var (
-		oldestUnprocessedTaskTimestamp = t.timeSource.Now().UnixNano()
-		oldestUnprocessedTaskID        = t.ackLevels.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryReplication, pollingCluster).GetTaskID()
-		previousReadTaskID             = t.ackLevels.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryReplication, pollingCluster).GetTaskID()
-	)
+	var oldestUnprocessedTaskID int64
+	var oldestUnprocessedTaskTimestamp int64
+	previousReadTaskID := t.ackLevels.GetQueueClusterAckLevel(persistence.HistoryTaskCategoryReplication, pollingCluster).GetTaskID()
 
 	if lastReadTaskID == constants.EmptyMessageID {
 		lastReadTaskID = previousReadTaskID
@@ -157,6 +155,11 @@ func (t *TaskAckManager) getTasks(ctx context.Context, pollingCluster string, la
 		// tasks must be ordered by taskID/time.
 		oldestUnprocessedTaskID = taskInfos[0].GetTaskID()
 		oldestUnprocessedTaskTimestamp = taskInfos[0].GetVisibilityTimestamp().UnixNano()
+	} else {
+		// if there are no replication tasks, use the max read level as the oldest unprocessed task
+		// this means there are no tasks to process, so the lag is 0
+		oldestUnprocessedTaskID = t.ackLevels.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryReplication, pollingCluster).GetTaskID()
+		oldestUnprocessedTaskTimestamp = t.timeSource.Now().UnixNano()
 	}
 
 	t.scope.RecordTimer(metrics.ReplicationTasksLagRaw, time.Duration(t.ackLevels.UpdateIfNeededAndGetQueueMaxReadLevel(persistence.HistoryTaskCategoryReplication, pollingCluster).GetTaskID()-oldestUnprocessedTaskID))
