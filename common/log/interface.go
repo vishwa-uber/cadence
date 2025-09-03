@@ -22,7 +22,7 @@ package log
 
 import "github.com/uber/cadence/common/log/tag"
 
-//go:generate mockery --name Logger --quiet --output . --structname MockLogger --inpackage --inpackage-suffix --filename logger_mock.go --unroll-variadic=False
+//go:generate mockgen -package=$GOPACKAGE -destination=logger_mock.go -self_package=github.com/uber/cadence/common/log github.com/uber/cadence/common/log Logger
 
 // Logger is our abstraction for logging
 // Usage examples:
