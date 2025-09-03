@@ -54,7 +54,39 @@ type Params[SP ShardProcessor] struct {
 	TimeSource            clock.TimeSource
 }
 
+// NewExecutorWithNamespace creates an executor for a specific namespace
+func NewExecutorWithNamespace[SP ShardProcessor](params Params[SP], namespace string) (Executor[SP], error) {
+	// Validate the config first
+	if err := params.Config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Get config for the specified namespace
+	namespaceConfig, err := params.Config.GetConfigForNamespace(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("get config for namespace %s: %w", namespace, err)
+	}
+
+	return newExecutorWithConfig(params, namespaceConfig)
+}
+
+// NewExecutor creates an executor using auto-selection (single namespace only)
 func NewExecutor[SP ShardProcessor](params Params[SP]) (Executor[SP], error) {
+	// Validate the config first
+	if err := params.Config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Auto-select if there's only one namespace
+	namespaceConfig, err := params.Config.GetSingleConfig()
+	if err != nil {
+		return nil, fmt.Errorf("auto-select namespace: %w", err)
+	}
+
+	return newExecutorWithConfig(params, namespaceConfig)
+}
+
+func newExecutorWithConfig[SP ShardProcessor](params Params[SP], namespaceConfig *NamespaceConfig) (Executor[SP], error) {
 	shardDistributorClient, err := createShardDistributorExecutorClient(params.YarpcClient, params.MetricsScope, params.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create shard distributor executor client: %w", err)
@@ -65,15 +97,15 @@ func NewExecutor[SP ShardProcessor](params Params[SP]) (Executor[SP], error) {
 
 	metricsScope := params.MetricsScope.Tagged(map[string]string{
 		metrics.OperationTagName: metricsconstants.ShardDistributorExecutorOperationTagName,
-		"namespace":              params.Config.Namespace,
+		"namespace":              namespaceConfig.Namespace,
 	})
 
 	return &executorImpl[SP]{
 		logger:                 params.Logger,
 		shardDistributorClient: shardDistributorClient,
 		shardProcessorFactory:  params.ShardProcessorFactory,
-		heartBeatInterval:      params.Config.HeartBeatInterval,
-		namespace:              params.Config.Namespace,
+		heartBeatInterval:      namespaceConfig.HeartBeatInterval,
+		namespace:              namespaceConfig.Namespace,
 		executorID:             executorID,
 		timeSource:             params.TimeSource,
 		stopC:                  make(chan struct{}),
@@ -96,6 +128,18 @@ func createShardDistributorExecutorClient(yarpcClient sharddistributorv1.ShardDi
 func Module[SP ShardProcessor]() fx.Option {
 	return fx.Module("shard-distributor-executor-client",
 		fx.Provide(NewExecutor[SP]),
+		fx.Invoke(func(executor Executor[SP], lc fx.Lifecycle) {
+			lc.Append(fx.StartStopHook(executor.Start, executor.Stop))
+		}),
+	)
+}
+
+// ModuleWithNamespace creates an executor module for a specific namespace
+func ModuleWithNamespace[SP ShardProcessor](namespace string) fx.Option {
+	return fx.Module(fmt.Sprintf("shard-distributor-executor-client-%s", namespace),
+		fx.Provide(func(params Params[SP]) (Executor[SP], error) {
+			return NewExecutorWithNamespace(params, namespace)
+		}),
 		fx.Invoke(func(executor Executor[SP], lc fx.Lifecycle) {
 			lc.Append(fx.StartStopHook(executor.Start, executor.Stop))
 		}),
