@@ -77,9 +77,16 @@ func newWorkflowCommands() []*cli.Command {
 			Action: RunWorkflow,
 		},
 		{
+			Name:    "terminate",
+			Aliases: []string{"term"},
+			Usage:   "force-stop a workflow execution (no cleanup)",
+			Flags:   getFlagsForTerminate(),
+			Action:  TerminateWorkflow,
+		},
+		{
 			Name:    "cancel",
 			Aliases: []string{"c"},
-			Usage:   "cancel a workflow execution",
+			Usage:   "gracefully stop a workflow execution (similar to terminate, but allows to cleanup)",
 			Flags:   getFlagsForCancel(),
 			Action:  CancelWorkflow,
 		},
@@ -95,13 +102,6 @@ func newWorkflowCommands() []*cli.Command {
 			Usage:  "signal the current open workflow if exists, or attempt to start a new run based on IDResuePolicy and signals it",
 			Flags:  getFlagsForSignalWithStart(),
 			Action: SignalWithStartWorkflowExecution,
-		},
-		{
-			Name:    "terminate",
-			Aliases: []string{"term"},
-			Usage:   "terminate a new workflow execution",
-			Flags:   getFlagsForTerminate(),
-			Action:  TerminateWorkflow,
 		},
 		{
 			Name:        "list",
