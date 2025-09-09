@@ -104,6 +104,8 @@ func FromShardDistributorExecutorHeartbeatRequest(t *types.ExecutorHeartbeatRequ
 				status = sharddistributorv1.ShardStatus_SHARD_STATUS_INVALID
 			case types.ShardStatusREADY:
 				status = sharddistributorv1.ShardStatus_SHARD_STATUS_READY
+			case types.ShardStatusDONE:
+				status = sharddistributorv1.ShardStatus_SHARD_STATUS_DONE
 			default:
 				status = sharddistributorv1.ShardStatus_SHARD_STATUS_INVALID
 			}
