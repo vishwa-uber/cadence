@@ -102,6 +102,8 @@ func TestReplicationSimulation(t *testing.T) {
 			err = signalWithStartWorkflow(t, op, simCfg)
 		case simTypes.ReplicationSimulationOperationMigrateDomainToActiveActive:
 			err = migrateDomainToActiveActive(t, op, simCfg)
+		case simTypes.ReplicationSimulationOperationValidateWorkflowReplication:
+			err = validateWorkflowReplication(t, op, simCfg)
 		default:
 			require.Failf(t, "unknown operation type", "operation type: %s", op.Type)
 		}
@@ -480,6 +482,54 @@ func validate(
 
 	if op.Want.CompletedByWorkersInCluster != "" && completedWorker != simTypes.WorkerIdentityFor(op.Want.CompletedByWorkersInCluster, op.Domain) {
 		return fmt.Errorf("workflow %s completed by worker %s, expected %s", op.WorkflowID, completedWorker, simTypes.WorkerIdentityFor(op.Want.CompletedByWorkersInCluster, op.Domain))
+	}
+
+	return nil
+}
+
+func validateWorkflowReplication(
+	t *testing.T,
+	op *simTypes.Operation,
+	simCfg *simTypes.ReplicationSimulationConfig,
+) error {
+	t.Helper()
+
+	simTypes.Logf(t, "Describing workflow: %s on domain %s on cluster: %s", op.WorkflowID, op.Domain, op.Cluster)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err := simCfg.MustGetFrontendClient(t, op.SourceCluster).DescribeWorkflowExecution(ctx,
+		&types.DescribeWorkflowExecutionRequest{
+			Domain: op.Domain,
+			Execution: &types.WorkflowExecution{
+				WorkflowID: op.WorkflowID,
+			},
+		})
+	if err != nil {
+		return err
+	}
+
+	sourceClusterWorkflowExecution := resp.GetWorkflowExecutionInfo().GetExecution()
+
+	simTypes.Logf(t, "Described workflow: %s on domain: %s on cluster: %s. Status: %s, CloseTime: %v", op.WorkflowID, op.Domain, op.Cluster, resp.GetWorkflowExecutionInfo().GetCloseStatus(), time.Unix(0, resp.GetWorkflowExecutionInfo().GetCloseTime()))
+
+	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err = simCfg.MustGetFrontendClient(t, op.TargetCluster).DescribeWorkflowExecution(ctx,
+		&types.DescribeWorkflowExecutionRequest{
+			Domain: op.Domain,
+			Execution: &types.WorkflowExecution{
+				WorkflowID: op.WorkflowID,
+			},
+		})
+	if err != nil {
+		return err
+	}
+
+	targetClusterWorkflowExecution := resp.GetWorkflowExecutionInfo().GetExecution()
+
+	if !reflect.DeepEqual(sourceClusterWorkflowExecution, targetClusterWorkflowExecution) {
+		return fmt.Errorf("workflow execution info mismatch between source cluster %s and target cluster %s for workflow %s. \nSource: %+v\nTarget: %+v", op.SourceCluster, op.TargetCluster, op.WorkflowID, *sourceClusterWorkflowExecution, *targetClusterWorkflowExecution)
 	}
 
 	return nil
