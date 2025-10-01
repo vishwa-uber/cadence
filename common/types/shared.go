@@ -1740,14 +1740,14 @@ func (v *DescribeDomainResponse) GetFailoverInfo() (o *FailoverInfo) {
 
 // FailoverDomainRequest is an internal type (TBD...)
 type FailoverDomainRequest struct {
-	DomainName              *string `json:"domainName,omitempty"`
+	DomainName              string  `json:"domainName,omitempty"`
 	DomainActiveClusterName *string `json:"domainActiveClusterName,omitempty"`
 }
 
 // GetDomainName is an internal getter (TBD...)
 func (v *FailoverDomainRequest) GetDomainName() (o string) {
-	if v != nil && v.DomainName != nil {
-		return *v.DomainName
+	if v != nil {
+		return v.DomainName
 	}
 	return
 }
@@ -1762,8 +1762,8 @@ func (v *FailoverDomainRequest) GetDomainActiveClusterName() (o string) {
 
 // GetDomain is an internal getter (TBD...)
 func (v *FailoverDomainRequest) GetDomain() (o string) {
-	if v != nil && v.DomainName != nil {
-		return *v.DomainName
+	if v != nil {
+		return v.DomainName
 	}
 	return
 }

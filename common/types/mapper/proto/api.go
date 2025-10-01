@@ -4510,18 +4510,19 @@ func FromFailoverDomainRequest(t *types.FailoverDomainRequest) *apiv1.FailoverDo
 	if t == nil {
 		return nil
 	}
-	// Stub implementation - return empty request until we know the proto structure
-	return &apiv1.FailoverDomainRequest{}
+	return &apiv1.FailoverDomainRequest{
+		DomainName:              t.DomainName,
+		DomainActiveClusterName: *t.DomainActiveClusterName,
+	}
 }
 
 func ToFailoverDomainRequest(t *apiv1.FailoverDomainRequest) *types.FailoverDomainRequest {
 	if t == nil {
 		return nil
 	}
-	// Stub implementation - return empty request until we know the proto structure
 	return &types.FailoverDomainRequest{
-		DomainName:              common.StringPtr(""),
-		DomainActiveClusterName: common.StringPtr(""),
+		DomainName:              t.DomainName,
+		DomainActiveClusterName: common.StringPtr(t.DomainActiveClusterName),
 	}
 }
 
@@ -4529,12 +4530,37 @@ func FromFailoverDomainResponse(t *types.FailoverDomainResponse) *apiv1.Failover
 	if t == nil {
 		return nil
 	}
-	// Create a simplified response for now - stub implementation
+
+	domain := &apiv1.Domain{
+		FailoverVersion: t.FailoverVersion,
+		IsGlobalDomain:  t.IsGlobalDomain,
+	}
+	if info := t.DomainInfo; info != nil {
+		domain.Id = info.UUID
+		domain.Name = info.Name
+		domain.Status = FromDomainStatus(info.Status)
+		domain.Description = info.Description
+		domain.OwnerEmail = info.OwnerEmail
+		domain.Data = info.Data
+	}
+	if config := t.Configuration; config != nil {
+		domain.IsolationGroups = FromIsolationGroupConfig(config.IsolationGroups)
+		domain.WorkflowExecutionRetentionPeriod = daysToDuration(&config.WorkflowExecutionRetentionPeriodInDays)
+		domain.BadBinaries = FromBadBinaries(config.BadBinaries)
+		domain.HistoryArchivalStatus = FromArchivalStatus(config.HistoryArchivalStatus)
+		domain.HistoryArchivalUri = config.HistoryArchivalURI
+		domain.VisibilityArchivalStatus = FromArchivalStatus(config.VisibilityArchivalStatus)
+		domain.VisibilityArchivalUri = config.VisibilityArchivalURI
+		domain.AsyncWorkflowConfig = FromDomainAsyncWorkflowConfiguraton(config.AsyncWorkflowConfig)
+	}
+	if repl := t.ReplicationConfiguration; repl != nil {
+		domain.ActiveClusterName = repl.ActiveClusterName
+		domain.Clusters = FromClusterReplicationConfigurationArray(repl.Clusters)
+		domain.ActiveClusters = FromActiveClusters(repl.ActiveClusters)
+	}
+
 	return &apiv1.FailoverDomainResponse{
-		Domain: &apiv1.Domain{
-			Id:   t.DomainInfo.GetUUID(),
-			Name: t.DomainInfo.GetName(),
-		},
+		Domain: domain,
 	}
 }
 
@@ -4542,16 +4568,33 @@ func ToFailoverDomainResponse(t *apiv1.FailoverDomainResponse) *types.FailoverDo
 	if t == nil || t.Domain == nil {
 		return nil
 	}
-	// Create a simplified response for now - stub implementation
 	return &types.FailoverDomainResponse{
 		DomainInfo: &types.DomainInfo{
-			Name: t.Domain.Name,
-			UUID: t.Domain.Id,
+			Name:        t.Domain.Name,
+			Status:      ToDomainStatus(t.Domain.Status),
+			Description: t.Domain.Description,
+			OwnerEmail:  t.Domain.OwnerEmail,
+			Data:        t.Domain.Data,
+			UUID:        t.Domain.Id,
 		},
-		Configuration:            &types.DomainConfiguration{},
-		ReplicationConfiguration: &types.DomainReplicationConfiguration{},
-		FailoverVersion:          0,
-		IsGlobalDomain:           false,
+		Configuration: &types.DomainConfiguration{
+			WorkflowExecutionRetentionPeriodInDays: common.Int32Default(durationToDays(t.Domain.WorkflowExecutionRetentionPeriod)),
+			EmitMetric:                             true,
+			BadBinaries:                            ToBadBinaries(t.Domain.BadBinaries),
+			HistoryArchivalStatus:                  ToArchivalStatus(t.Domain.HistoryArchivalStatus),
+			HistoryArchivalURI:                     t.Domain.HistoryArchivalUri,
+			VisibilityArchivalStatus:               ToArchivalStatus(t.Domain.VisibilityArchivalStatus),
+			VisibilityArchivalURI:                  t.Domain.VisibilityArchivalUri,
+			IsolationGroups:                        ToIsolationGroupConfig(t.Domain.IsolationGroups),
+			AsyncWorkflowConfig:                    ToDomainAsyncWorkflowConfiguraton(t.Domain.AsyncWorkflowConfig),
+		},
+		ReplicationConfiguration: &types.DomainReplicationConfiguration{
+			ActiveClusterName: t.Domain.ActiveClusterName,
+			Clusters:          ToClusterReplicationConfigurationArray(t.Domain.Clusters),
+			ActiveClusters:    ToActiveClusters(t.Domain.ActiveClusters),
+		},
+		FailoverVersion: t.Domain.FailoverVersion,
+		IsGlobalDomain:  t.Domain.IsGlobalDomain,
 	}
 }
 
