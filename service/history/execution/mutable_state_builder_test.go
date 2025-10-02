@@ -3923,6 +3923,28 @@ func TestLoad_ActiveActive(t *testing.T) {
 						FailoverVersion:   200,
 					},
 				},
+				AttributeScopes: map[string]*types.ClusterAttributeScope{
+					"cityID": {
+						ClusterAttributes: map[string]*types.ActiveClusterInfo{
+							"seattle": {
+								ActiveClusterName: "cluster0",
+								FailoverVersion:   100,
+							},
+							"sydney": {
+								ActiveClusterName: "cluster1",
+								FailoverVersion:   200,
+							},
+						},
+					},
+					"regionID": {
+						ClusterAttributes: map[string]*types.ActiveClusterInfo{
+							"us-west": {
+								ActiveClusterName: "cluster0",
+								FailoverVersion:   100,
+							},
+						},
+					},
+				},
 			},
 		},
 		1,

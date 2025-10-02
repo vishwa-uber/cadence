@@ -2287,13 +2287,59 @@ func (v *DomainReplicationConfiguration) ByteSize() uint64 {
 	return size
 }
 
+// ActiveClusters defines the mapping of cluster attributes to their active cluster.
+// It contains a list of scopes, each of which contains a list of attribute to cluster mappings.
+// The following example uses 'cityID' as the attribute scope, and cities as the attributes names:
+// ClusterAttributes allow groups of workflows to be processed by different clusters within a domain.
+//
+//	ActiveClusters = {
+//	  "cityID": { // any attribute scope, e.g a region, datacenter, city, etc.
+//	    "seattle": {
+//	        "activeClusterName": "cluster1",
+//	        "failoverVersion": 100,
+//	    },
+//	    "san_francisco": {
+//	        "activeClusterName": "cluster2",
+//	        "failoverVersion": 200,
+//	    },
+//	  },
+//	}
+//
+// TODO(c-warren): Rename to ClusterAttributes
 type ActiveClusters struct {
+	// TODO(c-warren): Remove once refactor to ClusterAttribute is complete
 	ActiveClustersByRegion map[string]ActiveClusterInfo `json:"activeClustersByRegion,omitempty"`
+	// ClusterAttributes
+	// Keyed by a scope type (e.g region, datacenter, city, etc.).
+	// The value is a ClusterAttributeScope - a map of unique names (e.g seattle, san_francisco, etc.) to an ActiveClusterInfo.
+	AttributeScopes map[string]*ClusterAttributeScope `json:"attributeScopes,omitempty"`
 }
 
+// TODO(c-warren): Remove once refactor to ClusterAttribute is complete
 func (v *ActiveClusters) GetActiveClustersByRegion() (o map[string]ActiveClusterInfo) {
 	if v != nil && v.ActiveClustersByRegion != nil {
 		return v.ActiveClustersByRegion
+	}
+	return
+}
+
+func (v *ActiveClusters) GetAttributeScopes() (o map[string]*ClusterAttributeScope) {
+	if v != nil && v.AttributeScopes != nil {
+		return v.AttributeScopes
+	}
+	return
+}
+
+func (v *ActiveClusters) GetAttributeScope(scopeType string) (o *ClusterAttributeScope) {
+	if v != nil && v.AttributeScopes != nil {
+		return v.AttributeScopes[scopeType]
+	}
+	return
+}
+
+func (v *ActiveClusters) GetActiveClusterByClusterAttribute(scopeType, attributeName string) (o *ActiveClusterInfo) {
+	if v != nil && v.AttributeScopes != nil {
+		return v.AttributeScopes[scopeType].GetActiveClusterByClusterAttribute(attributeName)
 	}
 	return
 }
@@ -2307,14 +2353,51 @@ func (v *ActiveClusters) ByteSize() uint64 {
 	size := uint64(unsafe.Sizeof(*v))
 	for k, val := range v.ActiveClustersByRegion {
 		// ByteSize implementation must match the logic in the reflection-based calculator used in the tests from common/types/test_util.go.
-		// reflection-based calculator purposely ignores Go’s internal map bucket/storage and treats each map element as
+		// reflection-based calculator purposely ignores Go's internal map bucket/storage and treats each map element as
 		// key: dynamic payload only (e.g., len(string)), no string header
-		// value: dynamic payload only (e.g., for a struct, just its fields’ dynamic payload), no struct header, no inline ints/bools
+		// value: dynamic payload only (e.g., for a struct, just its fields' dynamic payload), no struct header, no inline ints/bools
 		size += uint64(len(k)) + val.ByteSize() - uint64(unsafe.Sizeof(val))
+	}
+	for k, scope := range v.AttributeScopes {
+		size += uint64(len(k))
+		if scope != nil {
+			size += scope.ByteSize()
+		}
 	}
 	return size
 }
 
+// ClusterAttributeScope is a map of unique attribute names to the active cluster for that attribute.
+// It can be used to determine the current failover version for a workflow associated with that attribute.
+type ClusterAttributeScope struct {
+	ClusterAttributes map[string]*ActiveClusterInfo `json:"clusterAttributes,omitempty"`
+}
+
+func (v *ClusterAttributeScope) GetActiveClusterByClusterAttribute(name string) *ActiveClusterInfo {
+	if v != nil && v.ClusterAttributes != nil {
+		return v.ClusterAttributes[name]
+	}
+	return nil
+}
+
+// ByteSize returns the approximate memory used in bytes
+func (v *ClusterAttributeScope) ByteSize() uint64 {
+	if v == nil {
+		return 0
+	}
+	size := uint64(unsafe.Sizeof(*v))
+	if v.ClusterAttributes != nil {
+		for k, clusterInfo := range v.ClusterAttributes {
+			size += uint64(len(k))
+			if clusterInfo != nil {
+				size += clusterInfo.ByteSize()
+			}
+		}
+	}
+	return size
+}
+
+// ActiveClusterInfo defines failover information for a ClusterAttribute.
 type ActiveClusterInfo struct {
 	ActiveClusterName string `json:"activeClusterName,omitempty"`
 	FailoverVersion   int64  `json:"failoverVersion,omitempty"`
@@ -5156,6 +5239,7 @@ type RegisterDomainRequest struct {
 	Clusters                               []*ClusterReplicationConfiguration `json:"clusters,omitempty"`
 	ActiveClusterName                      string                             `json:"activeClusterName,omitempty"`
 	ActiveClustersByRegion                 map[string]string                  `json:"activeClustersByRegion,omitempty"`
+	ActiveClusters                         *ActiveClusters                    `json:"activeClusters,omitempty"`
 	Data                                   map[string]string                  `json:"data,omitempty"`
 	SecurityToken                          string                             `json:"securityToken,omitempty"`
 	IsGlobalDomain                         bool                               `json:"isGlobalDomain,omitempty"`
