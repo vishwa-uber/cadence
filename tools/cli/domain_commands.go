@@ -458,6 +458,41 @@ func (d *domainCLIImpl) DeprecateDomain(c *cli.Context) error {
 	return nil
 }
 
+// FailoverDomain fails over a single domain to a target cluster
+func (d *domainCLIImpl) FailoverDomain(c *cli.Context) error {
+	domainName, err := getRequiredOption(c, FlagDomain)
+	if err != nil {
+		return commoncli.Problem("Required flag not found: ", err)
+	}
+
+	var failoverRequest *types.FailoverDomainRequest
+
+	ctx, cancel, err := newContext(c)
+	defer cancel()
+	if err != nil {
+		return commoncli.Problem("Error in creating context: ", err)
+	}
+
+	if c.IsSet(FlagActiveClusterName) { // active-passive domain failover
+		activeCluster := c.String(FlagActiveClusterName)
+		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
+
+		failoverRequest = &types.FailoverDomainRequest{
+			DomainName:              domainName,
+			DomainActiveClusterName: common.StringPtr(activeCluster),
+		}
+	}
+	_, err = d.failoverDomain(ctx, failoverRequest)
+	if err != nil {
+		if _, ok := err.(*types.EntityNotExistsError); ok {
+			return commoncli.Problem(fmt.Sprintf("Domain %s does not exist.", domainName), err)
+		}
+		return commoncli.Problem("Operation FailoverDomain failed.", err)
+	}
+	fmt.Printf("Domain %s successfully failed over.\n", domainName)
+	return nil
+}
+
 // FailoverDomains is used for managed failover all domains with domain data IsManagedByCadence=true
 func (d *domainCLIImpl) FailoverDomains(c *cli.Context) error {
 	// ask user for confirmation
@@ -901,6 +936,18 @@ func (d *domainCLIImpl) describeDomain(
 	}
 
 	return d.domainHandler.DescribeDomain(ctx, request)
+}
+
+func (d *domainCLIImpl) failoverDomain(
+	ctx context.Context,
+	request *types.FailoverDomainRequest,
+) (*types.FailoverDomainResponse, error) {
+
+	if d.frontendClient != nil {
+		return d.frontendClient.FailoverDomain(ctx, request)
+	}
+
+	return d.domainHandler.FailoverDomain(ctx, request)
 }
 
 func archivalStatus(c *cli.Context, statusFlagName string) (*types.ArchivalStatus, error) {

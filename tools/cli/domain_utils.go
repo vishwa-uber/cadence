@@ -270,6 +270,14 @@ var (
 		getFormatFlag(),
 	}
 
+	failoverDomainFlags = []cli.Flag{
+		&cli.StringFlag{
+			Name:    FlagActiveClusterName,
+			Aliases: []string{"ac"},
+			Usage:   "Active cluster name",
+		},
+	}
+
 	adminDomainCommonFlags = getDBFlags()
 
 	adminRegisterDomainFlags = append(
