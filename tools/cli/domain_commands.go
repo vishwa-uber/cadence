@@ -718,7 +718,7 @@ func newDomainRow(domain *types.DescribeDomainResponse) DomainRow {
 		VisibilityArchivalURI:    domain.Configuration.GetVisibilityArchivalURI(),
 		BadBinaries:              newBadBinaryRows(domain.Configuration.BadBinaries),
 		FailoverInfo:             newFailoverInfoRow(domain.FailoverInfo),
-		IsActiveActiveDomain:     domain.ReplicationConfiguration.IsActiveActiveDomain(),
+		IsActiveActiveDomain:     domain.ReplicationConfiguration.IsActiveActive(),
 		ActiveClustersByRegion:   newActiveClustersByRegion(domain.ReplicationConfiguration.GetActiveClusters()),
 	}
 }

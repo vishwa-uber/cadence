@@ -2260,15 +2260,15 @@ type DomainReplicationConfiguration struct {
 	ActiveClusters    *ActiveClusters                    `json:"activeClusters,omitempty"`
 }
 
-func (v *DomainReplicationConfiguration) IsActiveActiveDomain() bool {
+func (v *DomainReplicationConfiguration) IsActiveActive() bool {
 	if v == nil || v.ActiveClusters == nil {
 		return false
 	}
-	if v.ActiveClusters.AttributeScopes != nil && len(v.ActiveClusters.AttributeScopes) > 0 {
+	// todo (david.porter) remove this once we have completely migrated to AttributeScopes
+	if len(v.ActiveClusters.ActiveClustersByRegion) > 0 {
 		return true
 	}
-	// todo (david.porter) remove this once we have fully migrated to AttributeScopes
-	if v.ActiveClusters.ActiveClustersByRegion != nil && len(v.ActiveClusters.ActiveClustersByRegion) > 0 {
+	if len(v.ActiveClusters.AttributeScopes) > 0 {
 		return true
 	}
 	return false
@@ -2543,7 +2543,7 @@ func (v *ClusterAttributeScope) ByteSize() uint64 {
 // ActiveClusterInfo defines failover information for a ClusterAttribute.
 type ActiveClusterInfo struct {
 	ActiveClusterName string `json:"activeClusterName,omitempty" yaml:"activeClusterName,omitempty"`
-	FailoverVersion   int64  `json:"failoverVersion,omitempty" yaml:"failoverVersion,omitempty"`
+	FailoverVersion   int64  `json:"failoverVersion" yaml:"failoverVersion"`
 }
 
 // ByteSize returns the approximate memory used in bytes
