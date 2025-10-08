@@ -366,7 +366,31 @@ func TestRegisterDomain(t *testing.T) {
 			expectedErr: &types.BadRequestError{},
 		},
 		{
-			name: "active-active domain successfully registered",
+			name: "active-active domain successfully registered with explicit ActiveClusterName",
+			request: &types.RegisterDomainRequest{
+				Name:              "active-active-domain",
+				IsGlobalDomain:    true,
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				ActiveClustersByRegion: map[string]string{
+					cluster.TestRegion1: cluster.TestCurrentClusterName,
+					cluster.TestRegion2: cluster.TestAlternativeClusterName,
+				},
+				Clusters: []*types.ClusterReplicationConfiguration{
+					{ClusterName: cluster.TestCurrentClusterName},
+					{ClusterName: cluster.TestAlternativeClusterName},
+				},
+				WorkflowExecutionRetentionPeriodInDays: 3,
+			},
+			isPrimaryCluster: true,
+			mockSetup: func(mockDomainMgr *persistence.MockDomainManager, mockReplicator *MockReplicator, request *types.RegisterDomainRequest) {
+				mockDomainMgr.EXPECT().GetDomain(gomock.Any(), &persistence.GetDomainRequest{Name: request.Name}).Return(nil, &types.EntityNotExistsError{})
+				mockDomainMgr.EXPECT().CreateDomain(gomock.Any(), gomock.Any()).Return(&persistence.CreateDomainResponse{ID: "test-domain-id"}, nil)
+				mockReplicator.EXPECT().HandleTransmissionTask(gomock.Any(), types.DomainOperationCreate, gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), commonconstants.InitialPreviousFailoverVersion, true).Return(nil)
+			},
+			wantErr: false,
+		},
+		{
+			name: "active-active domain successfully registered without explicit ActiveClusterName (uses current cluster)",
 			request: &types.RegisterDomainRequest{
 				Name:           "active-active-domain",
 				IsGlobalDomain: true,
@@ -1640,6 +1664,7 @@ func TestHandler_UpdateDomain(t *testing.T) {
 			setupMock: func(domainManager *persistence.MockDomainManager, updateRequest *types.UpdateDomainRequest, archivalMetadata *archiver.MockArchivalMetadata, timeSource clock.MockedTimeSource, domainReplicator *MockReplicator) {
 				domainResponse := &persistence.GetDomainResponse{
 					ReplicationConfig: &persistence.DomainReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
 						Clusters: []*persistence.ClusterReplicationConfig{
 							{ClusterName: cluster.TestCurrentClusterName},
 							{ClusterName: cluster.TestAlternativeClusterName},
@@ -1692,6 +1717,7 @@ func TestHandler_UpdateDomain(t *testing.T) {
 					Info:   domainResponse.Info,
 					Config: domainResponse.Config,
 					ReplicationConfig: &persistence.DomainReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
 						Clusters: []*persistence.ClusterReplicationConfig{
 							{ClusterName: cluster.TestCurrentClusterName},
 							{ClusterName: cluster.TestAlternativeClusterName},
@@ -1747,6 +1773,7 @@ func TestHandler_UpdateDomain(t *testing.T) {
 			response: func(timeSource clock.MockedTimeSource) *types.UpdateDomainResponse {
 				data, _ := json.Marshal([]FailoverEvent{{
 					EventTime:    timeSource.Now(),
+					FromCluster:  cluster.TestCurrentClusterName,
 					FailoverType: commonconstants.FailoverType(commonconstants.FailoverTypeForce).String(),
 					FromActiveClusters: types.ActiveClusters{
 						ActiveClustersByRegion: map[string]types.ActiveClusterInfo{
@@ -1792,6 +1819,7 @@ func TestHandler_UpdateDomain(t *testing.T) {
 						AsyncWorkflowConfig:                    &types.AsyncWorkflowConfiguration{Enabled: true},
 					},
 					ReplicationConfiguration: &types.DomainReplicationConfiguration{
+						ActiveClusterName: cluster.TestCurrentClusterName,
 						Clusters: []*types.ClusterReplicationConfiguration{
 							{ClusterName: cluster.TestCurrentClusterName},
 							{ClusterName: cluster.TestAlternativeClusterName},
