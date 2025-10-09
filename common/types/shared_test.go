@@ -656,3 +656,120 @@ func TestActiveClusters_SetClusterForRegion(t *testing.T) {
 		})
 	}
 }
+
+func TestActiveClusters_GetFailoverVersionForAttribute(t *testing.T) {
+	tests := []struct {
+		name           string
+		activeClusters *ActiveClusters
+		scopeType      string
+		attributeName  string
+		expected       int64
+		expectedErr    error
+	}{
+		{
+			name: "normal value / success case - this should provide the failover version",
+			activeClusters: &ActiveClusters{
+				AttributeScopes: map[string]ClusterAttributeScope{
+					"region": {
+						ClusterAttributes: map[string]ActiveClusterInfo{
+							"us-east-1": {
+								ActiveClusterName: "cluster1",
+								FailoverVersion:   100,
+							},
+							"us-west-2": {
+								ActiveClusterName: "cluster2",
+								FailoverVersion:   200,
+							},
+						},
+					},
+				},
+			},
+			scopeType:     "region",
+			attributeName: "us-east-1",
+			expected:      100,
+		},
+		{
+			name: "normal value / success case for zero values",
+			activeClusters: &ActiveClusters{
+				AttributeScopes: map[string]ClusterAttributeScope{
+					"region": {
+						ClusterAttributes: map[string]ActiveClusterInfo{
+							"us-east-1": {
+								ActiveClusterName: "cluster1",
+								FailoverVersion:   0,
+							},
+						},
+					},
+				},
+			},
+			scopeType:     "region",
+			attributeName: "us-east-1",
+			expected:      0,
+		},
+		{
+			name:           "nil receiver should return an error",
+			activeClusters: nil,
+			scopeType:      "region",
+			attributeName:  "us-east-1",
+			expected:       -1,
+			expectedErr: &ClusterAttributeNotFoundError{
+				ScopeType:     "region",
+				AttributeName: "us-east-1",
+			},
+		},
+		{
+			name:           "empty ActiveClusters should return an error",
+			activeClusters: &ActiveClusters{},
+			scopeType:      "region",
+			attributeName:  "us-east-1",
+			expected:       -1,
+			expectedErr: &ClusterAttributeNotFoundError{
+				ScopeType:     "region",
+				AttributeName: "us-east-1",
+			},
+		},
+		{
+			name: "nil AttributeScopes should return an error",
+			activeClusters: &ActiveClusters{
+				AttributeScopes: nil,
+			},
+			scopeType:     "region",
+			attributeName: "us-east-1",
+			expected:      -1,
+			expectedErr: &ClusterAttributeNotFoundError{
+				ScopeType:     "region",
+				AttributeName: "us-east-1",
+			},
+		},
+		{
+			name: "scopeType not found should return an error",
+			activeClusters: &ActiveClusters{
+				AttributeScopes: map[string]ClusterAttributeScope{
+					"region": {
+						ClusterAttributes: map[string]ActiveClusterInfo{
+							"us-east-1": {
+								ActiveClusterName: "cluster1",
+								FailoverVersion:   100,
+							},
+						},
+					},
+				},
+			},
+			scopeType:     "datacenter",
+			attributeName: "dc1",
+			expected:      -1,
+			expectedErr: &ClusterAttributeNotFoundError{
+				ScopeType:     "datacenter",
+				AttributeName: "dc1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := tt.activeClusters.GetFailoverVersionForAttribute(tt.scopeType, tt.attributeName)
+			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, tt.expectedErr, gotErr)
+		})
+	}
+}

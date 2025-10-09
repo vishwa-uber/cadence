@@ -1883,9 +1883,19 @@ func (d *handlerImpl) buildActiveActiveClusterScopesFromUpdateRequest(updateRequ
 	}
 
 	// ensure a failover version is set for the incoming request
-	for _, scopeData := range updateRequest.ActiveClusters.AttributeScopes {
+	for scope, scopeData := range updateRequest.ActiveClusters.AttributeScopes {
 		for attribute, activeCluster := range scopeData.ClusterAttributes {
-			activeCluster.FailoverVersion = d.clusterMetadata.GetNextFailoverVersion(activeCluster.ActiveClusterName, activeCluster.FailoverVersion, domainName)
+
+			currentFailoverVersion := types.UndefinedFailoverVersion
+			if config != nil && config.ActiveClusters != nil {
+				fo, err := config.ActiveClusters.GetFailoverVersionForAttribute(scope, attribute)
+				if err == nil {
+					currentFailoverVersion = fo
+				}
+			}
+			nextFailoverVersion := d.clusterMetadata.GetNextFailoverVersion(activeCluster.ActiveClusterName, currentFailoverVersion, domainName)
+
+			activeCluster.FailoverVersion = nextFailoverVersion
 			scopeData.ClusterAttributes[attribute] = activeCluster
 		}
 	}
