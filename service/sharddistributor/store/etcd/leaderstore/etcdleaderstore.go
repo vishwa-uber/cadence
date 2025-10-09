@@ -1,4 +1,4 @@
-package etcd
+package leaderstore
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/fx"
 
+	"github.com/uber/cadence/common/log"
 	"github.com/uber/cadence/service/sharddistributor/config"
 	"github.com/uber/cadence/service/sharddistributor/store"
 )
@@ -18,20 +19,21 @@ type LeaderStore struct {
 	electionConfig etcdCfg
 }
 
-type LeaderStoreParams struct {
-	fx.In
-
-	// Client could be provided externally.
-	Client    *clientv3.Client `optional:"true"`
-	Cfg       config.ShardDistribution
-	Lifecycle fx.Lifecycle
-}
-
 type etcdCfg struct {
 	Endpoints   []string      `yaml:"endpoints"`
 	DialTimeout time.Duration `yaml:"dialTimeout"`
 	Prefix      string        `yaml:"prefix"`
 	ElectionTTL time.Duration `yaml:"electionTTL"`
+}
+
+// StoreParams defines the dependencies for the etcd store, for use with fx.
+type StoreParams struct {
+	fx.In
+
+	Client    *clientv3.Client `optional:"true"`
+	Cfg       config.ShardDistribution
+	Lifecycle fx.Lifecycle
+	Logger    log.Logger
 }
 
 // NewLeaderStore creates a new leaderstore backed by ETCD.

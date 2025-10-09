@@ -22,6 +22,15 @@ var (
 	ErrExecutorNotRunning = fmt.Errorf("executor not running")
 )
 
+type ErrShardAlreadyAssigned struct {
+	ShardID    string
+	AssignedTo string
+}
+
+func (e *ErrShardAlreadyAssigned) Error() string {
+	return fmt.Sprintf("shard %s is already assigned to %s", e.ShardID, e.AssignedTo)
+}
+
 // Txn represents a generic, backend-agnostic transaction.
 // It is used as a vehicle for the GuardFunc to operate on.
 type Txn interface{}
@@ -43,10 +52,6 @@ func NopGuard() GuardFunc {
 type AssignShardsRequest struct {
 	// NewState is the new state of the namespace, containing the new assignments of shards to executors.
 	NewState *NamespaceState
-
-	// ShardsToDelete is a map of shards to delete. These shards are not present in the NewState, as they
-	// should be deleted, so we need to pass them explicitly.
-	ShardsToDelete map[string]ShardState
 }
 
 // Store is a composite interface that combines all storage capabilities.
