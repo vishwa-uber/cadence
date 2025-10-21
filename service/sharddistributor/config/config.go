@@ -95,7 +95,8 @@ const (
 	MigrationModeONBOARDED              = "onboarded"
 )
 
-var configMode = map[string]types.MigrationMode{
+// ConfigMode maps string migration mode values to types.MigrationMode
+var ConfigMode = map[string]types.MigrationMode{
 	MigrationModeINVALID:                types.MigrationModeINVALID,
 	MigrationModeLOCALPASSTHROUGH:       types.MigrationModeLOCALPASSTHROUGH,
 	MigrationModeLOCALPASSTHROUGHSHADOW: types.MigrationModeLOCALPASSTHROUGHSHADOW,
@@ -106,11 +107,11 @@ var configMode = map[string]types.MigrationMode{
 func (s *ShardDistribution) GetMigrationMode(namespace string) types.MigrationMode {
 	for _, ns := range s.Namespaces {
 		if ns.Name == namespace {
-			return configMode[ns.Mode]
+			return ConfigMode[ns.Mode]
 		}
 	}
 	// TODO in the dynamic configuration I will setup a default value
-	return configMode[MigrationModeONBOARDED]
+	return ConfigMode[MigrationModeONBOARDED]
 }
 
 // NewConfig returns new service config with default values
