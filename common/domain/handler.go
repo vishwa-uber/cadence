@@ -587,8 +587,8 @@ func (d *handlerImpl) UpdateDomain(
 				// we increment failover version so top level failoverVersion is updated and domain data is replicated.
 				failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 					replicationConfig.ActiveClusterName,
-					// TODO(active-active): This should be incremented in the same way as an active-passive domain
-					failoverVersion+1,
+					failoverVersion+1, //todo: (active-active): Let's review if we need to increment
+					// this for cluster-attr failover changes. It may not be necessary to increment
 					updateRequest.Name,
 				)
 
@@ -613,12 +613,10 @@ func (d *handlerImpl) UpdateDomain(
 
 			// case 3. active-active domain's ActiveClusters is changed
 			if wasActiveActive && isActiveActive {
-				// top level failover version is not used for task versions for active-active domains but we still increment it
-				// to indicate there was a change in replication config
 				failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
-					d.clusterMetadata.GetCurrentClusterName(),
-					// TODO(active-active): If the domain level ActiveCluster has changed this should be incremented in the same way as an active-passive domain
-					failoverVersion+1,
+					replicationConfig.ActiveClusterName,
+					failoverVersion+1, //todo: (active-active): Let's review if we need to increment
+					// this for cluster-attr failover changes. It may not be necessary to increment
 					updateRequest.Name,
 				)
 
@@ -821,9 +819,11 @@ func (d *handlerImpl) FailoverDomain(
 		if !wasActiveActive && isActiveActive {
 			// for active-passive to active-active migration,
 			// we increment failover version so top level failoverVersion is updated and domain data is replicated.
+
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
-				failoverVersion+1,
+				failoverVersion+1, //todo: (active-active): Let's review if we need to increment
+				// this for cluster-attr failover changes. It may not be necessary to increment
 				updateRequest.Name,
 			)
 
@@ -851,8 +851,9 @@ func (d *handlerImpl) FailoverDomain(
 			// top level failover version is not used for task versions for active-active domains but we still increment it
 			// to indicate there was a change in replication config
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
-				d.clusterMetadata.GetCurrentClusterName(),
-				failoverVersion+1,
+				replicationConfig.ActiveClusterName,
+				failoverVersion+1, //todo: (active-active): Let's review if we need to increment
+				// this for cluster-attr failover changes. It may not be necessary to increment
 				updateRequest.Name,
 			)
 
