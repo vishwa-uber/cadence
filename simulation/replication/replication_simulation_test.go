@@ -146,6 +146,10 @@ func startWorkflow(
 		ChildWorkflowID:      op.ChildWorkflowID,
 		ChildWorkflowTimeout: op.ChildWorkflowTimeout,
 	})
+	workflowIDReusePolicy := types.WorkflowIDReusePolicyAllowDuplicate.Ptr()
+	if op.WorkflowIDReusePolicy != nil {
+		workflowIDReusePolicy = op.WorkflowIDReusePolicy
+	}
 	resp, err := simCfg.MustGetFrontendClient(t, op.Cluster).StartWorkflowExecution(ctx,
 		&types.StartWorkflowExecutionRequest{
 			RequestID:                           uuid.New(),
@@ -156,7 +160,7 @@ func startWorkflow(
 			ExecutionStartToCloseTimeoutSeconds: common.Int32Ptr(int32((op.WorkflowExecutionStartToCloseTimeout).Seconds())),
 			TaskStartToCloseTimeoutSeconds:      common.Int32Ptr(5),
 			Input:                               input,
-			WorkflowIDReusePolicy:               types.WorkflowIDReusePolicyAllowDuplicate.Ptr(),
+			WorkflowIDReusePolicy:               workflowIDReusePolicy,
 			DelayStartSeconds:                   common.Int32Ptr(op.DelayStartSeconds),
 			CronSchedule:                        op.CronSchedule,
 			ActiveClusterSelectionPolicy:        op.ActiveClusterSelectionPolicy,
@@ -363,11 +367,15 @@ func signalWithStartWorkflow(
 
 	frontendCl := simCfg.MustGetFrontendClient(t, op.Cluster)
 
+	workflowIDReusePolicy := types.WorkflowIDReusePolicyAllowDuplicate.Ptr()
+	if op.WorkflowIDReusePolicy != nil {
+		workflowIDReusePolicy = op.WorkflowIDReusePolicy
+	}
 	signalResp, err := frontendCl.SignalWithStartWorkflowExecution(ctx, &types.SignalWithStartWorkflowExecutionRequest{
 		RequestID:                           uuid.New(),
 		Domain:                              op.Domain,
 		WorkflowID:                          op.WorkflowID,
-		WorkflowIDReusePolicy:               types.WorkflowIDReusePolicyAllowDuplicate.Ptr(),
+		WorkflowIDReusePolicy:               workflowIDReusePolicy,
 		WorkflowType:                        &types.WorkflowType{Name: op.WorkflowType},
 		SignalName:                          op.SignalName,
 		SignalInput:                         mustJSON(t, op.SignalInput),
