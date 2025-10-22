@@ -127,7 +127,6 @@ func (d *AttrValidatorImpl) validateDomainReplicationConfigForGlobalDomain(
 	if !isInClusters(activeCluster) {
 		return errActiveClusterNotInClusters
 	}
-
 	// For active-active domains, also validate that all clusters in AttributeScopes are valid
 	if activeClusters != nil && activeClusters.AttributeScopes != nil {
 		for _, scope := range activeClusters.AttributeScopes {
@@ -181,6 +180,36 @@ func (d *AttrValidatorImpl) validateClusterName(
 			"Invalid cluster name: %v",
 			clusterName,
 		)}
+	}
+	return nil
+}
+
+func (d *AttrValidatorImpl) validateActiveActiveDomainReplicationConfig(
+	activeClusters *types.ActiveClusters,
+) error {
+
+	if activeClusters == nil || activeClusters.AttributeScopes == nil {
+		return nil
+	}
+
+	clusters := d.clusterMetadata.GetEnabledClusterInfo()
+
+	for _, scopeData := range activeClusters.AttributeScopes {
+		for _, activeCluster := range scopeData.ClusterAttributes {
+			_, ok := clusters[activeCluster.ActiveClusterName]
+			if !ok {
+				return &types.BadRequestError{Message: fmt.Sprintf(
+					"Invalid active cluster name: %v",
+					activeCluster.ActiveClusterName,
+				)}
+			}
+			if activeCluster.FailoverVersion < 0 {
+				return &types.BadRequestError{Message: fmt.Sprintf(
+					"invalid failover version: %d",
+					activeCluster.FailoverVersion,
+				)}
+			}
+		}
 	}
 	return nil
 }

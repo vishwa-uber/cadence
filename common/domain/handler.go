@@ -1544,16 +1544,23 @@ func (d *handlerImpl) updateDeleteBadBinary(
 	return config, false, nil
 }
 
+// updateReplicationConfig is the function which takes the input request and current state and edits and returns it
+// to the desired state by merging the request values with the current state.
+// replicationConfigChanged being turned on will trigger an increment in the configVersion.
+// activeClusterChanged indicates a failover is happening and a failover version is to be incremented
 func (d *handlerImpl) updateReplicationConfig(
 	domainName string,
 	config *persistence.DomainReplicationConfig,
 	updateRequest *types.UpdateDomainRequest,
-) (*persistence.DomainReplicationConfig, bool, bool, error) {
+) (
+	mutatedCfg *persistence.DomainReplicationConfig,
+	replicationConfigChanged bool,
+	activeClusterChanged bool,
+	err error,
+) {
 
-	clusterUpdated := false
-	activeClusterUpdated := false
 	if len(updateRequest.Clusters) != 0 {
-		clusterUpdated = true
+		replicationConfigChanged = true
 		clustersNew := []*persistence.ClusterReplicationConfig{}
 		for _, clusterConfig := range updateRequest.Clusters {
 			clustersNew = append(clustersNew, &persistence.ClusterReplicationConfig{
@@ -1571,12 +1578,15 @@ func (d *handlerImpl) updateReplicationConfig(
 	}
 
 	if updateRequest.ActiveClusterName != nil {
-		activeClusterUpdated = true
+		activeClusterChanged = true
 		config.ActiveClusterName = *updateRequest.ActiveClusterName
 	}
 
-	// ActiveClustersByRegion field has been removed - this logic is now handled by AttributeScopes
-	// The legacy ActiveClustersByRegion functionality is replaced by using AttributeScopes with "region" scope
+	err = d.domainAttrValidator.validateActiveActiveDomainReplicationConfig(updateRequest.ActiveClusters)
+	if err != nil {
+		return nil, false, false, err
+	}
+
 	if updateRequest != nil && updateRequest.ActiveClusters != nil && updateRequest.ActiveClusters.AttributeScopes != nil {
 		result, isCh := d.buildActiveActiveClusterScopesFromUpdateRequest(updateRequest, config, domainName)
 		if isCh {
@@ -1588,12 +1598,12 @@ func (d *handlerImpl) updateReplicationConfig(
 			}
 
 			config.ActiveClusters.AttributeScopes = result.AttributeScopes
-			activeClusterUpdated = true
-			clusterUpdated = true
+			activeClusterChanged = true
+			replicationConfigChanged = true
 		}
 	}
 
-	return config, clusterUpdated, activeClusterUpdated, nil
+	return config, replicationConfigChanged, activeClusterChanged, nil
 }
 
 func (d *handlerImpl) handleGracefulFailover(
