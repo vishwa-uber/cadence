@@ -11,6 +11,7 @@ const (
 	ExecutorReportedShardsKey = "reported_shards"
 	ExecutorAssignedStateKey  = "assigned_state"
 	ShardAssignedKey          = "assigned"
+	ExecutorMetadataKey       = "metadata"
 )
 
 var validKeyTypes = []string{
@@ -18,6 +19,7 @@ var validKeyTypes = []string{
 	ExecutorStatusKey,
 	ExecutorReportedShardsKey,
 	ExecutorAssignedStateKey,
+	ExecutorMetadataKey,
 }
 
 func isValidKeyType(key string) bool {
@@ -56,4 +58,13 @@ func ParseExecutorKey(prefix string, namespace, key string) (executorID, keyType
 		return "", "", fmt.Errorf("unexpected key format: %s", key)
 	}
 	return parts[0], parts[1], nil
+}
+
+func BuildMetadataKey(prefix string, namespace, executorID, metadataKey string) string {
+	metadataKeyPrefix, err := BuildExecutorKey(prefix, namespace, executorID, ExecutorMetadataKey)
+	if err != nil {
+		// This should never happen since ExecutorMetadataKey is a valid constant
+		panic(fmt.Sprintf("BuildMetadataKey: unexpected error building executor key: %v", err))
+	}
+	return fmt.Sprintf("%s/%s", metadataKeyPrefix, metadataKey)
 }

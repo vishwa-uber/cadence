@@ -47,6 +47,10 @@ var (
 				ShardLoad: 0.75,
 			},
 		},
+		Metadata: map[string]string{
+			"key-1": "value-1",
+			"key-2": "value-2",
+		},
 	}
 	ShardDistributorExecutorHeartbeatResponse = types.ExecutorHeartbeatResponse{
 		ShardAssignments: map[string]*types.ShardAssignment{

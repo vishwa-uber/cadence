@@ -42,3 +42,8 @@ func TestParseExecutorKey(t *testing.T) {
 	_, _, err = ParseExecutorKey("/cadence", "test-ns", "/cadence/test-ns/executors/exec-1/heartbeat/extra")
 	assert.ErrorContains(t, err, "unexpected key format: /cadence/test-ns/executors/exec-1/heartbeat/extra")
 }
+
+func TestBuildMetadataKey(t *testing.T) {
+	got := BuildMetadataKey("/cadence", "test-ns", "exec-1", "my-metadata-key")
+	assert.Equal(t, "/cadence/test-ns/executors/exec-1/metadata/my-metadata-key", got)
+}

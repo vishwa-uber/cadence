@@ -16,6 +16,10 @@ import (
 
 const (
 	_heartbeatRefreshRate = 2 * time.Second
+
+	_maxMetadataKeys      = 32
+	_maxMetadataKeyLength = 128
+	_maxMetadataValueSize = 512 * 1024 // 512KB
 )
 
 type executor struct {
@@ -78,6 +82,11 @@ func (h *executor) Heartbeat(ctx context.Context, request *types.ExecutorHeartbe
 		LastHeartbeat:  now.Unix(),
 		Status:         request.Status,
 		ReportedShards: request.ShardStatusReports,
+		Metadata:       request.GetMetadata(),
+	}
+
+	if err := validateMetadata(newHeartbeat.Metadata); err != nil {
+		return nil, fmt.Errorf("validate metadata: %w", err)
 	}
 
 	err = h.storage.RecordHeartbeat(ctx, request.Namespace, request.ExecutorID, newHeartbeat)
@@ -129,4 +138,22 @@ func _convertResponse(shards *store.AssignedState, mode types.MigrationMode) *ty
 	res.ShardAssignments = shards.AssignedShards
 	res.MigrationMode = mode
 	return res
+}
+
+func validateMetadata(metadata map[string]string) error {
+	if len(metadata) > _maxMetadataKeys {
+		return fmt.Errorf("metadata has %d keys, which exceeds the maximum of %d", len(metadata), _maxMetadataKeys)
+	}
+
+	for key, value := range metadata {
+		if len(key) > _maxMetadataKeyLength {
+			return fmt.Errorf("metadata key %q has length %d, which exceeds the maximum of %d", key, len(key), _maxMetadataKeyLength)
+		}
+
+		if len(value) > _maxMetadataValueSize {
+			return fmt.Errorf("metadata value for key %q has size %d bytes, which exceeds the maximum of %d bytes", key, len(value), _maxMetadataValueSize)
+		}
+	}
+
+	return nil
 }

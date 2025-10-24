@@ -356,6 +356,136 @@ func TestHeartbeat(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), expectedErr.Error())
 	})
+
+	// Test Case 11: Heartbeat with metadata validation failure - too many keys
+	t.Run("MetadataValidationTooManyKeys", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockStore := store.NewMockStore(ctrl)
+		mockTimeSource := clock.NewMockedTimeSourceAt(now)
+		shardDistributionCfg := config.ShardDistribution{}
+		handler := NewExecutorHandler(testlogger.New(t), mockStore, mockTimeSource, shardDistributionCfg)
+
+		// Create metadata with more than max allowed keys
+		metadata := make(map[string]string)
+		for i := 0; i < _maxMetadataKeys+1; i++ {
+			metadata[string(rune('a'+i))] = "value"
+		}
+
+		req := &types.ExecutorHeartbeatRequest{
+			Namespace:  namespace,
+			ExecutorID: executorID,
+			Status:     types.ExecutorStatusACTIVE,
+			Metadata:   metadata,
+		}
+
+		mockStore.EXPECT().GetHeartbeat(gomock.Any(), namespace, executorID).Return(nil, nil, store.ErrExecutorNotFound)
+
+		_, err := handler.Heartbeat(ctx, req)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "validate metadata")
+		require.Contains(t, err.Error(), "exceeds the maximum")
+	})
+}
+
+func TestValidateMetadata(t *testing.T) {
+	// Helper function to generate metadata with N keys
+	makeMetadataWithKeys := func(n int) map[string]string {
+		metadata := make(map[string]string)
+		for i := 0; i < n; i++ {
+			metadata[string(rune('a'+i))] = "value"
+		}
+		return metadata
+	}
+
+	testCases := []struct {
+		name           string
+		metadata       map[string]string
+		expectError    bool
+		errorSubstring string
+	}{
+		{
+			name: "ValidMetadata",
+			metadata: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			expectError: false,
+		},
+		{
+			name:        "EmptyMetadata",
+			metadata:    map[string]string{},
+			expectError: false,
+		},
+		{
+			name:        "NilMetadata",
+			metadata:    nil,
+			expectError: false,
+		},
+		{
+			name:           "TooManyKeys",
+			metadata:       makeMetadataWithKeys(_maxMetadataKeys + 1),
+			expectError:    true,
+			errorSubstring: "exceeds the maximum of 32",
+		},
+		{
+			name:        "ExactlyMaxKeys",
+			metadata:    makeMetadataWithKeys(_maxMetadataKeys),
+			expectError: false,
+		},
+		{
+			name: "KeyTooLong",
+			metadata: map[string]string{
+				string(make([]byte, _maxMetadataKeyLength+1)): "value",
+			},
+			expectError:    true,
+			errorSubstring: "exceeds the maximum of 128",
+		},
+		{
+			name: "KeyExactlyMaxLength",
+			metadata: map[string]string{
+				string(make([]byte, _maxMetadataKeyLength)): "value",
+			},
+			expectError: false,
+		},
+		{
+			name: "ValueTooLarge",
+			metadata: map[string]string{
+				"key": string(make([]byte, _maxMetadataValueSize+1)),
+			},
+			expectError:    true,
+			errorSubstring: "exceeds the maximum of 524288 bytes",
+		},
+		{
+			name: "ValueExactlyMaxSize",
+			metadata: map[string]string{
+				"key": string(make([]byte, _maxMetadataValueSize)),
+			},
+			expectError: false,
+		},
+		{
+			name: "MultipleValidationErrors",
+			metadata: func() map[string]string {
+				metadata := makeMetadataWithKeys(_maxMetadataKeys + 1)
+				longKey := string(make([]byte, _maxMetadataKeyLength+1))
+				metadata[longKey] = "value"
+				return metadata
+			}(),
+			expectError:    true,
+			errorSubstring: "exceeds the maximum of 32", // First validation error
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateMetadata(tc.metadata)
+			if tc.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errorSubstring)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestConvertResponse(t *testing.T) {

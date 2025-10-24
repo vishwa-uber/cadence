@@ -92,6 +92,7 @@ type ExecutorHeartbeatRequest struct {
 	ExecutorID         string
 	Status             ExecutorStatus
 	ShardStatusReports map[string]*ShardStatusReport
+	Metadata           map[string]string
 }
 
 func (v *ExecutorHeartbeatRequest) GetNamespace() (o string) {
@@ -118,6 +119,13 @@ func (v *ExecutorHeartbeatRequest) GetStatus() (o ExecutorStatus) {
 func (v *ExecutorHeartbeatRequest) GetShardStatusReports() (o map[string]*ShardStatusReport) {
 	if v != nil {
 		return v.ShardStatusReports
+	}
+	return
+}
+
+func (v *ExecutorHeartbeatRequest) GetMetadata() (o map[string]string) {
+	if v != nil {
+		return v.Metadata
 	}
 	return
 }

@@ -121,6 +121,7 @@ func FromShardDistributorExecutorHeartbeatRequest(t *types.ExecutorHeartbeatRequ
 		ExecutorId:         t.GetExecutorID(),
 		Status:             status,
 		ShardStatusReports: shardStatusReports,
+		Metadata:           t.GetMetadata(),
 	}
 }
 
@@ -173,6 +174,7 @@ func ToShardDistributorExecutorHeartbeatRequest(t *sharddistributorv1.HeartbeatR
 		ExecutorID:         t.GetExecutorId(),
 		Status:             status,
 		ShardStatusReports: shardStatusReports,
+		Metadata:           t.GetMetadata(),
 	}
 }
 
