@@ -255,6 +255,10 @@ func (a *apiHandler) ListDomains(ctx context.Context, lp1 *types.ListDomainsRequ
 	return a.handler.ListDomains(ctx, lp1)
 }
 
+func (a *apiHandler) ListFailoverHistory(ctx context.Context, lp1 *types.ListFailoverHistoryRequest) (lp2 *types.ListFailoverHistoryResponse, err error) {
+	return a.handler.ListFailoverHistory(ctx, lp1)
+}
+
 func (a *apiHandler) ListOpenWorkflowExecutions(ctx context.Context, lp1 *types.ListOpenWorkflowExecutionsRequest) (lp2 *types.ListOpenWorkflowExecutionsResponse, err error) {
 	scope := a.getMetricsScopeWithDomain(metrics.FrontendListOpenWorkflowExecutionsScope, lp1.GetDomain())
 	attr := &authorization.Attributes{

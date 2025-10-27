@@ -382,6 +382,10 @@ func (handler *clusterRedirectionHandler) ListDomains(ctx context.Context, lp1 *
 	return handler.frontendHandler.ListDomains(ctx, lp1)
 }
 
+func (handler *clusterRedirectionHandler) ListFailoverHistory(ctx context.Context, lp1 *types.ListFailoverHistoryRequest) (lp2 *types.ListFailoverHistoryResponse, err error) {
+	return handler.frontendHandler.ListFailoverHistory(ctx, lp1)
+}
+
 func (handler *clusterRedirectionHandler) ListOpenWorkflowExecutions(ctx context.Context, lp1 *types.ListOpenWorkflowExecutionsRequest) (lp2 *types.ListOpenWorkflowExecutionsResponse, err error) {
 	var (
 		apiName                   = "ListOpenWorkflowExecutions"
