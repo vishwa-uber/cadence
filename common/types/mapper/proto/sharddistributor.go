@@ -57,6 +57,7 @@ func FromShardDistributorGetShardOwnerResponse(t *types.GetShardOwnerResponse) *
 	return &sharddistributorv1.GetShardOwnerResponse{
 		Owner:     t.GetOwner(),
 		Namespace: t.GetNamespace(),
+		Metadata:  t.GetMetadata(),
 	}
 }
 
@@ -68,6 +69,7 @@ func ToShardDistributorGetShardOwnerResponse(t *sharddistributorv1.GetShardOwner
 	return &types.GetShardOwnerResponse{
 		Owner:     t.GetOwner(),
 		Namespace: t.GetNamespace(),
+		Metadata:  t.GetMetadata(),
 	}
 }
 

@@ -47,3 +47,14 @@ func TestBuildMetadataKey(t *testing.T) {
 	got := BuildMetadataKey("/cadence", "test-ns", "exec-1", "my-metadata-key")
 	assert.Equal(t, "/cadence/test-ns/executors/exec-1/metadata/my-metadata-key", got)
 }
+
+func TestParseExecutorKey_MetadataKey(t *testing.T) {
+	// Test that ParseExecutorKey correctly identifies metadata keys
+	// and that we can extract the metadata key name from the full key
+	metadataKey := BuildMetadataKey("/cadence", "test-ns", "exec-1", "hostname")
+
+	executorID, keyType, err := ParseExecutorKey("/cadence", "test-ns", metadataKey)
+	assert.NoError(t, err)
+	assert.Equal(t, "exec-1", executorID)
+	assert.Equal(t, ExecutorMetadataKey, keyType)
+}

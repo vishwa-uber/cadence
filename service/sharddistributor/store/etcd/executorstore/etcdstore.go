@@ -421,12 +421,12 @@ func (s *executorStoreImpl) AssignShard(ctx context.Context, namespace, shardID,
 		comparisons = append(comparisons, cmp...)
 
 		// We check the shard cache to see if the shard is already assigned to an executor.
-		owner, err := s.shardCache.GetShardOwner(ctx, namespace, shardID)
+		shardOwner, err := s.shardCache.GetShardOwner(ctx, namespace, shardID)
 		if err != nil && !errors.Is(err, store.ErrShardNotFound) {
 			return fmt.Errorf("checking shard owner: %w", err)
 		}
 		if err == nil {
-			return &store.ErrShardAlreadyAssigned{ShardID: shardID, AssignedTo: owner}
+			return &store.ErrShardAlreadyAssigned{ShardID: shardID, AssignedTo: shardOwner.ExecutorID}
 		}
 
 		txnResp, err := s.client.Txn(ctx).
@@ -498,6 +498,6 @@ func (s *executorStoreImpl) DeleteExecutors(ctx context.Context, namespace strin
 	return nil
 }
 
-func (s *executorStoreImpl) GetShardOwner(ctx context.Context, namespace, shardID string) (string, error) {
+func (s *executorStoreImpl) GetShardOwner(ctx context.Context, namespace, shardID string) (*store.ShardOwner, error) {
 	return s.shardCache.GetShardOwner(ctx, namespace, shardID)
 }

@@ -54,6 +54,16 @@ func ParseExecutorKey(prefix string, namespace, key string) (executorID, keyType
 	}
 	remainder := strings.TrimPrefix(key, prefix)
 	parts := strings.Split(remainder, "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("unexpected key format: %s", key)
+	}
+	// For metadata keys, the format is: executorID/metadata/metadataKey
+	// For other keys, the format is: executorID/keyType
+	// We return executorID and the first keyType (e.g., "metadata")
+	if len(parts) > 2 && parts[1] == ExecutorMetadataKey {
+		// This is a metadata key, return "metadata" as the keyType
+		return parts[0], parts[1], nil
+	}
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("unexpected key format: %s", key)
 	}

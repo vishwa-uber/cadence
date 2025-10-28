@@ -61,7 +61,7 @@ type Store interface {
 	Subscribe(ctx context.Context, namespace string) (<-chan int64, error)
 	DeleteExecutors(ctx context.Context, namespace string, executorIDs []string, guard GuardFunc) error
 
-	GetShardOwner(ctx context.Context, namespace, shardID string) (string, error)
+	GetShardOwner(ctx context.Context, namespace, shardID string) (*ShardOwner, error)
 	AssignShard(ctx context.Context, namespace, shardID, executorID string) error
 
 	GetHeartbeat(ctx context.Context, namespace string, executorID string) (*HeartbeatState, *AssignedState, error)

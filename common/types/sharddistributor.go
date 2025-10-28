@@ -48,6 +48,7 @@ func (v *GetShardOwnerRequest) GetNamespace() (o string) {
 type GetShardOwnerResponse struct {
 	Owner     string
 	Namespace string
+	Metadata  map[string]string
 }
 
 func (v *GetShardOwnerResponse) GetOwner() (o string) {
@@ -60,6 +61,13 @@ func (v *GetShardOwnerResponse) GetOwner() (o string) {
 func (v *GetShardOwnerResponse) GetNamespace() (o string) {
 	if v != nil {
 		return v.Namespace
+	}
+	return
+}
+
+func (v *GetShardOwnerResponse) GetMetadata() (o map[string]string) {
+	if v != nil {
+		return v.Metadata
 	}
 	return
 }

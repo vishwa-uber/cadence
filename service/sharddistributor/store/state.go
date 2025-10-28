@@ -26,3 +26,8 @@ type NamespaceState struct {
 type ShardState struct {
 	ExecutorID string
 }
+
+type ShardOwner struct {
+	ExecutorID string
+	Metadata   map[string]string
+}
