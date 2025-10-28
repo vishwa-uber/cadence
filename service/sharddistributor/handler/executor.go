@@ -51,7 +51,6 @@ func (h *executor) Heartbeat(ctx context.Context, request *types.ExecutorHeartbe
 	}
 
 	now := h.timeSource.Now().UTC()
-
 	mode := h.shardDistributionCfg.GetMigrationMode(request.Namespace)
 
 	switch mode {
@@ -63,7 +62,7 @@ func (h *executor) Heartbeat(ctx context.Context, request *types.ExecutorHeartbe
 		return nil, fmt.Errorf("migration mode is local passthrough")
 	// From SD perspective the behaviour is the same
 	case types.MigrationModeLOCALPASSTHROUGHSHADOW, types.MigrationModeDISTRIBUTEDPASSTHROUGH:
-		assignedShards, err = h.assignShardsInCurrentHeartbeat(ctx, request, previousHeartbeat, assignedShards)
+		assignedShards, err = h.assignShardsInCurrentHeartbeat(ctx, request)
 		if err != nil {
 			return nil, err
 		}
@@ -98,10 +97,8 @@ func (h *executor) Heartbeat(ctx context.Context, request *types.ExecutorHeartbe
 }
 
 // assignShardsInCurrentHeartbeat is used during the migration phase to assign the shards to the executors according to what is reported during the heartbeat
-func (h *executor) assignShardsInCurrentHeartbeat(ctx context.Context, request *types.ExecutorHeartbeatRequest, previousHeartbeat *store.HeartbeatState, previousAssignedShards *store.AssignedState) (*store.AssignedState, error) {
-	assignedShards := *previousAssignedShards
-
-	assignedShards = store.AssignedState{
+func (h *executor) assignShardsInCurrentHeartbeat(ctx context.Context, request *types.ExecutorHeartbeatRequest) (*store.AssignedState, error) {
+	assignedShards := store.AssignedState{
 		AssignedShards: make(map[string]*types.ShardAssignment),
 		LastUpdated:    h.timeSource.Now().Unix(),
 		ModRevision:    int64(0),
@@ -126,17 +123,16 @@ func (h *executor) assignShardsInCurrentHeartbeat(ctx context.Context, request *
 	if err != nil {
 		return nil, fmt.Errorf("assign shards in current heartbeat: %w", err)
 	}
-
 	return &assignedShards, nil
 }
 
 func _convertResponse(shards *store.AssignedState, mode types.MigrationMode) *types.ExecutorHeartbeatResponse {
 	res := &types.ExecutorHeartbeatResponse{}
+	res.MigrationMode = mode
 	if shards == nil {
 		return res
 	}
 	res.ShardAssignments = shards.AssignedShards
-	res.MigrationMode = mode
 	return res
 }
 

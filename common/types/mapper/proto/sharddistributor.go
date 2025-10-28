@@ -233,8 +233,8 @@ func ToShardDistributorExecutorHeartbeatResponse(t *sharddistributorv1.Heartbeat
 				Status: status,
 			}
 		}
-		migrationMode = getMigrationModeFromProto(t.GetMigrationMode())
 	}
+	migrationMode = getMigrationModeFromProto(t.GetMigrationMode())
 
 	return &types.ExecutorHeartbeatResponse{
 		ShardAssignments: shardAssignments,
@@ -245,8 +245,6 @@ func ToShardDistributorExecutorHeartbeatResponse(t *sharddistributorv1.Heartbeat
 func getMigrationModeFromProto(protoMigrationMode sharddistributorv1.MigrationMode) types.MigrationMode {
 	var mode types.MigrationMode
 	switch protoMigrationMode {
-	case sharddistributorv1.MigrationMode_MIGRATION_MODE_INVALID:
-		mode = types.MigrationModeINVALID
 	case sharddistributorv1.MigrationMode_MIGRATION_MODE_LOCAL_PASSTHROUGH:
 		mode = types.MigrationModeLOCALPASSTHROUGH
 	case sharddistributorv1.MigrationMode_MIGRATION_MODE_LOCAL_PASSTHROUGH_SHADOW:
