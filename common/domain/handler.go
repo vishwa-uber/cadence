@@ -422,10 +422,12 @@ func (d *handlerImpl) UpdateDomain(
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.domainManager.GetDomain(ctx, &persistence.GetDomainRequest{Name: updateRequest.GetName()})
+	currentDomainState, err := d.domainManager.GetDomain(ctx, &persistence.GetDomainRequest{Name: updateRequest.GetName()})
 	if err != nil {
 		return nil, err
 	}
+
+	getResponse := currentDomainState.DeepCopy()
 
 	info := getResponse.Info
 	config := getResponse.Config
@@ -520,7 +522,6 @@ func (d *handlerImpl) UpdateDomain(
 	}
 
 	err = d.validateDomainReplicationConfigForUpdateDomain(replicationConfig, isGlobalDomain, configurationChanged, activeClusterChanged)
-
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +569,7 @@ func (d *handlerImpl) UpdateDomain(
 					tag.Dynamic("failover-type", failoverType),
 				)
 
-				err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+				err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 					now,
 					failoverType,
 					&currentActiveCluster,
@@ -598,7 +599,7 @@ func (d *handlerImpl) UpdateDomain(
 					tag.Dynamic("failover-type", failoverType),
 				)
 
-				err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+				err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 					now,
 					failoverType,
 					&currentActiveCluster,
@@ -626,7 +627,7 @@ func (d *handlerImpl) UpdateDomain(
 					tag.Dynamic("failover-type", failoverType),
 				)
 
-				err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+				err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 					now,
 					failoverType,
 					&currentActiveCluster,
@@ -802,7 +803,7 @@ func (d *handlerImpl) FailoverDomain(
 				tag.Dynamic("failover-type", failoverType),
 			)
 
-			err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+			err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 				now,
 				failoverType,
 				&currentActiveCluster,
@@ -833,7 +834,7 @@ func (d *handlerImpl) FailoverDomain(
 				tag.Dynamic("failover-type", failoverType),
 			)
 
-			err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+			err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 				now,
 				failoverType,
 				&currentActiveCluster,
@@ -863,7 +864,7 @@ func (d *handlerImpl) FailoverDomain(
 				tag.Dynamic("failover-type", failoverType),
 			)
 
-			err = updateFailoverHistory(info, d.config, NewFailoverEvent(
+			err = updateFailoverHistoryInDomainData(info, d.config, NewFailoverEvent(
 				now,
 				failoverType,
 				&currentActiveCluster,
@@ -1754,7 +1755,7 @@ func createUpdateRequest(
 	}
 }
 
-func updateFailoverHistory(
+func updateFailoverHistoryInDomainData(
 	info *persistence.DomainInfo,
 	config Config,
 	failoverEvent FailoverEvent,
