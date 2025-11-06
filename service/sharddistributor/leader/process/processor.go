@@ -230,16 +230,21 @@ func (p *namespaceProcessor) runCleanupLoop(ctx context.Context) {
 			return
 		case <-ticker.Chan():
 			p.logger.Info("Periodic heartbeat cleanup triggered.")
-			p.cleanupStaleExecutors(ctx)
+			namespaceState, err := p.shardStore.GetState(ctx, p.namespaceCfg.Name)
+			if err != nil {
+				p.logger.Error("Failed to get state for cleanup", tag.Error(err))
+				continue
+			}
+			p.cleanupStaleExecutors(ctx, namespaceState)
+			p.cleanupStaleShardStats(ctx, namespaceState)
 		}
 	}
 }
 
 // cleanupStaleExecutors removes executors who have not reported a heartbeat recently.
-func (p *namespaceProcessor) cleanupStaleExecutors(ctx context.Context) {
-	namespaceState, err := p.shardStore.GetState(ctx, p.namespaceCfg.Name)
-	if err != nil {
-		p.logger.Error("Failed to get state for heartbeat cleanup", tag.Error(err))
+func (p *namespaceProcessor) cleanupStaleExecutors(ctx context.Context, namespaceState *store.NamespaceState) {
+	if namespaceState == nil {
+		p.logger.Error("Namespace state missing for heartbeat cleanup")
 		return
 	}
 
@@ -261,6 +266,73 @@ func (p *namespaceProcessor) cleanupStaleExecutors(ctx context.Context) {
 	// Use the leader guard for the delete operation.
 	if err := p.shardStore.DeleteExecutors(ctx, p.namespaceCfg.Name, expiredExecutors, p.election.Guard()); err != nil {
 		p.logger.Error("Failed to delete stale executors", tag.Error(err))
+	}
+}
+
+func (p *namespaceProcessor) cleanupStaleShardStats(ctx context.Context, namespaceState *store.NamespaceState) {
+	if namespaceState == nil {
+		p.logger.Error("Namespace state missing for shard stats cleanup")
+		return
+	}
+
+	activeShards := make(map[string]struct{})
+	now := p.timeSource.Now().Unix()
+	shardStatsTTL := int64(p.cfg.HeartbeatTTL.Seconds())
+
+	// 1. build set of active executors
+
+	// add all assigned shards from executors that are ACTIVE and not stale
+	for executorID, assignedState := range namespaceState.ShardAssignments {
+		executor, exists := namespaceState.Executors[executorID]
+		if !exists {
+			continue
+		}
+
+		isActive := executor.Status == types.ExecutorStatusACTIVE
+		isNotStale := (now - executor.LastHeartbeat) <= shardStatsTTL
+		if isActive && isNotStale {
+			for shardID := range assignedState.AssignedShards {
+				activeShards[shardID] = struct{}{}
+			}
+		}
+	}
+
+	// add all shards in ReportedShards where the status is not DONE
+	for _, heartbeatState := range namespaceState.Executors {
+		for shardID, shardStatusReport := range heartbeatState.ReportedShards {
+			if shardStatusReport.Status != types.ShardStatusDONE {
+				activeShards[shardID] = struct{}{}
+			}
+		}
+	}
+
+	// 2. build set of stale shard stats
+
+	// append all shard stats that are not in the active shards set
+	var staleShardStats []string
+	for shardID, stats := range namespaceState.ShardStats {
+		if _, ok := activeShards[shardID]; ok {
+			continue
+		}
+		recentUpdate := stats.LastUpdateTime > 0 && (now-stats.LastUpdateTime) <= shardStatsTTL
+		recentMove := stats.LastMoveTime > 0 && (now-stats.LastMoveTime) <= shardStatsTTL
+		if recentUpdate || recentMove {
+			// Preserve stats that have been updated recently to allow cooldown/load history to
+			// survive executor churn. These shards are likely awaiting reassignment,
+			// so we don't want to delete them.
+			continue
+		}
+		staleShardStats = append(staleShardStats, shardID)
+	}
+
+	if len(staleShardStats) == 0 {
+		return
+	}
+
+	p.logger.Info("Removing stale shard stats")
+	// Use the leader guard for the delete operation.
+	if err := p.shardStore.DeleteShardStats(ctx, p.namespaceCfg.Name, staleShardStats, p.election.Guard()); err != nil {
+		p.logger.Error("Failed to delete stale shard stats", tag.Error(err))
 	}
 }
 
