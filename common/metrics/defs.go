@@ -1468,6 +1468,7 @@ const (
 const (
 	// ShardDistributorGetShardOwnerScope tracks GetShardOwner API calls received by service
 	ShardDistributorGetShardOwnerScope = iota + NumWorkerScopes
+	ShardDistributorWatchNamespaceStateScope
 	ShardDistributorHeartbeatScope
 	ShardDistributorAssignLoopScope
 
@@ -2153,6 +2154,7 @@ var ScopeDefs = map[ServiceIdx]map[ScopeIdx]scopeDefinition{
 	},
 	ShardDistributor: {
 		ShardDistributorGetShardOwnerScope:         {operation: "GetShardOwner"},
+		ShardDistributorWatchNamespaceStateScope:   {operation: "WatchNamespaceState"},
 		ShardDistributorHeartbeatScope:             {operation: "ExecutorHeartbeat"},
 		ShardDistributorAssignLoopScope:            {operation: "ShardAssignLoop"},
 		ShardDistributorExecutorScope:              {operation: "Executor"},
